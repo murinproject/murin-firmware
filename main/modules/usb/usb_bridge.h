@@ -7,10 +7,12 @@
 extern "C"
 {
 #endif
+    typedef void (*usb_bridge_cb_t)(void);
 
     void usb_bridge_init(void);
-    void usb_bridge_task(void *pvParameters);
-    void usb_bridge_write(const char *data, size_t len);
+    size_t usb_bridge_write_bytes(uint8_t *data, size_t len);
+    size_t usb_bridge_read_bytes(uint8_t *data, size_t len);
+    void usb_bridge_set_callback(usb_bridge_cb_t cb);
 
 #ifdef __cplusplus
 }

@@ -10,6 +10,12 @@ Optional keys in utils/test_config.yaml:
     perf_max_p95_ack_ms: 200
 """
 
+import sys
+from pathlib import Path
+
+# Add utils directory to path
+sys.path.insert(0, str(Path(__file__).parent.parent.parent / "utils"))
+
 import statistics
 import time
 

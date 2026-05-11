@@ -1,0 +1,7 @@
+port: "COM11"
+baudrate: 2000000
+perf_iterations: 50
+perf_warmup_iterations: 5
+perf_ack_timeout: 0.5
+perf_max_avg_ack_ms: 50
+perf_max_p95_ack_ms: 200

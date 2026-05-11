@@ -2,6 +2,8 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include "framed_link.h"
+#include "usb_bridge.h"
 
 #ifdef __cplusplus
 extern "C"
@@ -27,20 +29,21 @@ extern "C"
      *   (SOF is excluded)
      */
 
-    typedef void (*ros2_msgs_write_fn_t)(const uint8_t *data, size_t len, void *ctx);
+    typedef size_t (*ros2_msgs_write_fn_t)(uint8_t *data, size_t len);
+    typedef size_t (*ros2_msgs_read_fn_t)(uint8_t *data, size_t len);
 
     typedef struct
     {
-        uint8_t parse_buf[1024];
-        size_t parse_len;
-        ros2_msgs_write_fn_t write_fn;
-        void *write_ctx;
-    } ros2_msgs_t;
+        framed_link_t link;
+        uint8_t tx_seq;
+        ros2_msgs_write_fn_t write;
+        ros2_msgs_read_fn_t read;
+    } ros2_msgs_ctx_t;
 
-    void ros2_msgs_init(ros2_msgs_t *msgs, ros2_msgs_write_fn_t write_fn, void *write_ctx);
-    void ros2_msgs_on_rx(ros2_msgs_t *msgs, const uint8_t *data, size_t len);
-    void ros2_msgs_send_frame(ros2_msgs_t *msgs, uint8_t msg_type, uint8_t seq, const uint8_t *payload, size_t payload_len);
-    void ros2_telemetry_task(void *arg);
+    void ros2_msgs_init(void);
+    void ros2_msgs_on_rx(void);
+    void ros2_msgs_send_frame(ros2_msgs_ctx_t *msgs, uint8_t msg_type, uint8_t seq, const uint8_t *payload, size_t payload_len);
+    void ros2_msgs_send_telemetry(ros2_msgs_ctx_t *msgs, uint8_t seq);
 
 #ifdef __cplusplus
 }

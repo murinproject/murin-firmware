@@ -26,7 +26,7 @@
 #define UART_BRIDGE_RX_BUFFER_SIZE 1024
 
 static const char *TAG = "uart_bridge";
-static ros2_msgs_t ros2_msgs;
+static ros2_msgs_ctx_t ros2_msgs;
 
 static void uart_bridge_write_bytes(const uint8_t *data, size_t len, void *ctx)
 {
@@ -50,7 +50,7 @@ void uart_bridge_init(void)
     ESP_ERROR_CHECK(uart_driver_install(UART_BRIDGE_PORT, UART_BRIDGE_RX_BUFFER_SIZE, 0, 0, NULL, 0));
     ESP_ERROR_CHECK(uart_param_config(UART_BRIDGE_PORT, &uart_config));
     ESP_ERROR_CHECK(uart_set_pin(UART_BRIDGE_PORT, UART_BRIDGE_TX_GPIO, UART_BRIDGE_RX_GPIO, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
-    ros2_msgs_init(&ros2_msgs, uart_bridge_write_bytes, NULL);
+    ros2_msgs_init(uart_bridge_write_bytes, NULL);
 }
 
 void uart_bridge_task(void *pvParameters)
@@ -63,7 +63,7 @@ void uart_bridge_task(void *pvParameters)
         const int bytes_read = uart_read_bytes(UART_BRIDGE_PORT, rx_buf, sizeof(rx_buf), pdMS_TO_TICKS(20));
         if (bytes_read > 0)
         {
-            ros2_msgs_on_rx(&ros2_msgs, rx_buf, (size_t)bytes_read);
+            ros2_msgs_on_rx(rx_buf, (size_t)bytes_read);
         }
     }
 }

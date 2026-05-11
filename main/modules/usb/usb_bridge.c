@@ -1,5 +1,8 @@
 #include "usb_bridge.h"
 
+#include <stdbool.h>
+
+#include "esp_err.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -10,13 +13,91 @@
 #include "tinyusb_default_config.h"
 
 static const char *TAG = "usb_bridge";
-static uint8_t rx_buf[CONFIG_TINYUSB_CDC_RX_BUFSIZE];
-static ros2_msgs_t ros2_msgs;
+static usb_bridge_cb_t rx_cb = NULL;
+static volatile bool cdc_dtr = false;
+static volatile bool cdc_rts = false;
 
-static void usb_bridge_write_bytes(const uint8_t *data, size_t len, void *ctx)
+size_t usb_bridge_write(const char *data, size_t len)
 {
-    (void)ctx;
-    usb_bridge_write((const char *)data, len);
+    return usb_bridge_write_bytes((uint8_t *)data, len);
+}
+
+size_t usb_bridge_write_bytes(uint8_t *data, size_t len)
+{
+    size_t offset = 0;
+
+    if (!cdc_dtr)
+    {
+        return 0;
+    }
+
+    while (offset < len)
+    {
+        const size_t queued = tinyusb_cdcacm_write_queue(TINYUSB_CDC_ACM_0, (const uint8_t *)data + offset, len - offset);
+        if (queued == 0)
+        {
+            const esp_err_t err = tinyusb_cdcacm_write_flush(TINYUSB_CDC_ACM_0, 0);
+            if (err != ESP_OK && err != ESP_ERR_NOT_FINISHED)
+            {
+                ESP_LOGD(TAG, "USB flush failed while queue is full: %s", esp_err_to_name(err));
+            }
+            break;
+        }
+
+        offset += queued;
+        const esp_err_t err = tinyusb_cdcacm_write_flush(TINYUSB_CDC_ACM_0, 0);
+        if (err == ESP_OK || err == ESP_ERR_NOT_FINISHED)
+        {
+            continue;
+        }
+
+        ESP_LOGD(TAG, "USB flush failed: %s", esp_err_to_name(err));
+        break;
+    }
+
+    return offset;
+}
+
+size_t usb_bridge_read_bytes(uint8_t *data, size_t len)
+{
+    size_t rx_size = 0;
+    esp_err_t err = tinyusb_cdcacm_read(TINYUSB_CDC_ACM_0, data, len, &rx_size);
+
+    return err ? 0 : rx_size;
+}
+
+void usb_bridge_set_callback(usb_bridge_cb_t cb)
+{
+    rx_cb = cb;
+}
+
+static void usb_rx_cb(int itf, cdcacm_event_t *event)
+{
+    (void)itf;
+
+    if (event->type == CDC_EVENT_RX)
+    {
+        if (rx_cb != NULL)
+        {
+            rx_cb();
+        }
+    }
+}
+
+static void usb_line_state_cb(int itf, cdcacm_event_t *event)
+{
+    (void)itf;
+
+    if (event->type == CDC_EVENT_LINE_STATE_CHANGED)
+    {
+        cdc_dtr = event->line_state_changed_data.dtr;
+        cdc_rts = event->line_state_changed_data.rts;
+        ESP_LOGI(TAG,
+                 "USB CDC %s dtr=%d rts=%d",
+                 cdc_dtr ? "connected" : "disconnected",
+                 cdc_dtr,
+                 cdc_rts);
+    }
 }
 
 void usb_bridge_init(void)
@@ -27,48 +108,12 @@ void usb_bridge_init(void)
 
     tinyusb_config_cdcacm_t acm_cfg = {
         .cdc_port = TINYUSB_CDC_ACM_0,
-        .callback_rx = NULL,
+        .callback_rx = usb_rx_cb,
         .callback_rx_wanted_char = NULL,
-        .callback_line_state_changed = NULL,
+        .callback_line_state_changed = usb_line_state_cb,
         .callback_line_coding_changed = NULL,
     };
 
     ESP_ERROR_CHECK(tinyusb_cdcacm_init(&acm_cfg));
-    ros2_msgs_init(&ros2_msgs, usb_bridge_write_bytes, NULL);
     ESP_LOGI(TAG, "USB initialization DONE");
-}
-
-void usb_bridge_task(void *pvParameters)
-{
-    (void)pvParameters;
-
-    while (1)
-    {
-        size_t rx_size = 0;
-        ESP_ERROR_CHECK(tinyusb_cdcacm_read(TINYUSB_CDC_ACM_0, rx_buf, sizeof(rx_buf), &rx_size));
-        ros2_msgs_on_rx(&ros2_msgs, rx_buf, rx_size);
-        vTaskDelay(1);
-    }
-}
-
-void usb_bridge_write(const char *data, size_t len)
-{
-    size_t offset = 0;
-
-    while (offset < len)
-    {
-        const size_t queued = tinyusb_cdcacm_write_queue(TINYUSB_CDC_ACM_0, (const uint8_t *)data + offset, len - offset);
-        if (queued == 0)
-        {
-            ESP_ERROR_CHECK(tinyusb_cdcacm_write_flush(TINYUSB_CDC_ACM_0, 1));
-            continue;
-        }
-
-        offset += queued;
-        const esp_err_t err = tinyusb_cdcacm_write_flush(TINYUSB_CDC_ACM_0, 0);
-        if (err != ESP_OK && err != ESP_ERR_NOT_FINISHED)
-        {
-            ESP_ERROR_CHECK(err);
-        }
-    }
 }

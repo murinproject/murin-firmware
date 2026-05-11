@@ -1,43 +1,89 @@
+# ESP32 USB Protocol Utilities
+
+This folder contains serial monitor tools and pytest-based hardware tests for the ESP32 framed-link / ROS2 message protocol. The tools can decode incoming frames, send ROS2 commands, send custom framed-link payloads, and validate ACK/NACK behavior against a running ESP32 firmware image.
+
+## Files
+
+* `conftest.py` - 
+* `test_protocol.py` - protocol smoke tests for heartbeat, motor, servo, config, and invalid command handling
+* `test_perf.py` - heartbeat ACK latency smoke test
+* `test_config.yaml` - local serial port and test threshold configuration
+
 ## Prerequisites
 
 Install the Python packages used by `parser.py` and the pytest tests:
 
 ```bash
-# in root folder murin-firmware/
-python -m pip install - requirements.txt
-npm install
+python -m pip install pytest pyserial pyyaml
+```
+
+Optional: install the Node.js serial package if you want to use `parser.js`:
+
+```bash
+npm install serialport
 ```
 
 Flash the ESP32 firmware before running the monitor or hardware tests, then connect the board over USB.
+
+## Configure the Serial Port
+
+Edit `utils/test_config.yaml`:
+
+```yaml
+port: "COM11"
+baudrate: 2000000
+```
+
+Use the serial port for your machine:
+
+* Windows: `COM11`, `COM3`, etc.
+* Linux: `/dev/ttyUSB0` or `/dev/ttyACM0`
+* macOS: `/dev/tty.usbserial-*` or `/dev/tty.usbmodem*`
+
+If `port` is missing or empty, pytest will skip the hardware tests and the parser tools require `--port`.
 
 ## Parser Tools
 
 Both parsers read framed-link serial data, decode ROS2 messages, and can send one or more command frames after opening the serial port.
 
+Python:
+
 ```bash
-python tools/parser.py
-node tools/parser.js
+python utils/parser.py
+```
+
+Node.js:
+
+```bash
+node utils/parser.js
+```
+
+Override the serial settings from the command line:
+
+```bash
+python utils/parser.py --port COM11 --baudrate 2000000
+node utils/parser.js --port COM11 --baudrate 2000000
 ```
 
 Print raw serial bytes as they arrive:
 
 ```bash
-python tools/parser.py --raw
-node tools/parser.js --raw
+python utils/parser.py --raw
+node utils/parser.js --raw
 ```
 
 Send ROS2 command frames:
 
 ```bash
-python tools/parser.py --heartbeat
-python tools/parser.py --motor 512 -512
-python tools/parser.py --servo 0 1500
-python tools/parser.py --config 1 1
+python utils/parser.py --heartbeat
+python utils/parser.py --motor 512 -512
+python utils/parser.py --servo 0 1500
+python utils/parser.py --config 1 1
 
-node tools/parser.js --heartbeat
-node tools/parser.js --motor 512 -512
-node tools/parser.js --servo 0 1500
-node tools/parser.js --config 1 1
+node utils/parser.js --heartbeat
+node utils/parser.js --motor 512 -512
+node utils/parser.js --servo 0 1500
+node utils/parser.js --config 1 1
 ```
 
 You can combine send options. For example, send a heartbeat and disable telemetry:
