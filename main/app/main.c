@@ -18,6 +18,9 @@
 // #include "uart_bridge.h"
 #include "usb_bridge.h"
 #include "ros2_msgs.h"
+#include "shell_uart.h"
+#include "diag.h"
+#include "flash_storage.h"
 
 static const char *TAG = "example";
 
@@ -26,6 +29,8 @@ static const char *TAG = "example";
 
 void app_main(void)
 {
+    ESP_ERROR_CHECK(flash_storage_init());
+
     static motor_control_system_t motor_system = {
         .motors = {},
         .last_pulse_counts = {}};
@@ -63,9 +68,19 @@ void app_main(void)
     extend_led_set(3, 0, 0, 8);
 
     // --- RP3 Receiver initialization ---
-    static rp3_receiver_t rp3_receiver;
-    rp3_receiver_init(&rp3_receiver);
-    rp3_receiver_start_job(&rp3_receiver);
+    ESP_ERROR_CHECK(diag_init());
+
+    rp3_receiver_init();
 
     ros2_msgs_init();
+
+    shell_uart_init();
+
+    while (1)
+    {
+        led_set(16, 16, 16);
+        vTaskDelay(pdMS_TO_TICKS(1000));
+        led_set(0, 0, 0);
+        vTaskDelay(pdMS_TO_TICKS(1000));
+    }
 }

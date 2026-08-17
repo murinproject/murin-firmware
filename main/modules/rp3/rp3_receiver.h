@@ -22,6 +22,8 @@ typedef struct {
     int8_t downlink_rssi_dbm;
     uint8_t downlink_link_quality;
     int8_t downlink_snr_db;
+    bool rc_channels_valid;
+    uint16_t rc_channels[16];
 } rp3_signal_sample_t;
 
 typedef struct {
@@ -45,9 +47,8 @@ typedef struct {
     uint16_t rc_channels[16];
 } rp3_receiver_t;
 
-void rp3_receiver_init(rp3_receiver_t *receiver);
-void rp3_receiver_start_job(rp3_receiver_t *receiver);
-void rp3_receiver_get_snapshot(rp3_receiver_t *receiver, rp3_receiver_snapshot_t *snapshot);
+void rp3_receiver_init(void);
+void rp3_receiver_get_snapshot(rp3_receiver_snapshot_t *snapshot);
 
 #ifdef __cplusplus
 }

@@ -13,6 +13,7 @@
 #include "tinyusb_default_config.h"
 
 static const char *TAG = "usb_bridge";
+#define USB_BRIDGE_WRITE_RETRIES 100
 static usb_bridge_cb_t rx_cb = NULL;
 static volatile bool cdc_dtr = false;
 static volatile bool cdc_rts = false;
@@ -36,12 +37,32 @@ size_t usb_bridge_write_bytes(uint8_t *data, size_t len)
         const size_t queued = tinyusb_cdcacm_write_queue(TINYUSB_CDC_ACM_0, (const uint8_t *)data + offset, len - offset);
         if (queued == 0)
         {
-            const esp_err_t err = tinyusb_cdcacm_write_flush(TINYUSB_CDC_ACM_0, 0);
+            esp_err_t err = tinyusb_cdcacm_write_flush(TINYUSB_CDC_ACM_0, 0);
             if (err != ESP_OK && err != ESP_ERR_NOT_FINISHED)
             {
                 ESP_LOGD(TAG, "USB flush failed while queue is full: %s", esp_err_to_name(err));
+                return offset;
             }
-            break;
+
+            bool flushed = false;
+            for (int retry = 0; retry < USB_BRIDGE_WRITE_RETRIES; retry++)
+            {
+                vTaskDelay(pdMS_TO_TICKS(1));
+                err = tinyusb_cdcacm_write_flush(TINYUSB_CDC_ACM_0, 0);
+                if (err == ESP_OK)
+                {
+                    flushed = true;
+                    break;
+                }
+                if (err != ESP_ERR_NOT_FINISHED)
+                {
+                    ESP_LOGD(TAG, "USB flush failed while retrying: %s", esp_err_to_name(err));
+                    return offset;
+                }
+            }
+            if (!flushed)
+                return offset;
+            continue;
         }
 
         offset += queued;

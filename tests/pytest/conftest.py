@@ -2,6 +2,7 @@
 
 import time
 import sys
+import logging
 from pathlib import Path
 
 import pytest
@@ -16,6 +17,14 @@ from protocol_serial import SerialAgent
 CONFIG_PATH = Path(__file__).with_name("test_config.yaml")
 
 
+def pytest_configure(config):
+    """Show serial protocol logs only for highly verbose pytest runs."""
+    if config.getoption("verbose") >= 3:
+        config.option.log_cli = True
+        config.option.log_cli_level = "DEBUG"
+        logging.getLogger("protocol_serial").setLevel(logging.DEBUG)
+
+
 @pytest.fixture(scope="session")
 def test_config():
     try:
@@ -27,13 +36,16 @@ def test_config():
 
 @pytest.fixture(scope="session")
 def serial_agent(test_config):
-    port = test_config.get("port")
+    port = test_config.get("cdc_port")
     if not port:
         pytest.skip(f"No serial port configured in {CONFIG_PATH}")
 
     baudrate = test_config.get("baudrate", 115200)
     agent = SerialAgent(port, baudrate)
-    agent.connect()
+    try:
+        agent.connect()
+    except RuntimeError as exc:
+        pytest.skip(str(exc))
     agent.start_rx()
     time.sleep(0.2)
 

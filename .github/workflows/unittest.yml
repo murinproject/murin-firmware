@@ -1,7 +1,7 @@
 name: ROS2 Messages Unit Test
 on:
-  push:
   pull_request:
+  workflow_dispatch:
 
 jobs:
   ros2_msgs_unit_test:

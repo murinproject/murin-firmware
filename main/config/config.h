@@ -50,15 +50,15 @@
 /* Motor 3 GPIO pins */
 #define BDC_MCPWM_GPIO_A_3 15
 #define BDC_MCPWM_GPIO_B_3 16
-#define BDC_ENCODER_GPIO_A_3 38
-#define BDC_ENCODER_GPIO_B_3 37
+#define BDC_ENCODER_GPIO_A_3 21
+#define BDC_ENCODER_GPIO_B_3 22
 #define BDC_MCPWM_GROUP_3 1
 
 /* Motor 4 GPIO pins */
 #define BDC_MCPWM_GPIO_A_4 17
 #define BDC_MCPWM_GPIO_B_4 18
-#define BDC_ENCODER_GPIO_A_4 36
-#define BDC_ENCODER_GPIO_B_4 35
+#define BDC_ENCODER_GPIO_A_4 23
+#define BDC_ENCODER_GPIO_B_4 24
 #define BDC_MCPWM_GROUP_4 1
 
 /* I2C pins */

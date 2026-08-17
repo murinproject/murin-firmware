@@ -1,6 +1,7 @@
 import queue
 import threading
 import time
+import logging
 import serial
 
 from protocol_common import (
@@ -10,6 +11,9 @@ from protocol_common import (
     FrameParser,
     build_frame,
 )
+
+LOGGER = logging.getLogger(__name__)
+
 
 class SerialAgent:
     """Test agent for sending/receiving framed-link messages over serial."""
@@ -29,7 +33,7 @@ class SerialAgent:
             self.ser = serial.Serial(self.port, self.baudrate, timeout=0.01)
             self.ser.dtr = True
             self.ser.rts = True
-            print(f"[SERIAL] Connected to {self.port}")
+            LOGGER.debug("[SERIAL] Connected to %s", self.port)
         except serial.SerialException as e:
             raise RuntimeError(
                 f"Failed to connect to serial port {self.port}"
@@ -46,7 +50,7 @@ class SerialAgent:
                         self.rx_queue.put(frame)
             except Exception as e:
                 if not self._stop.is_set():
-                    print(f"[SERIAL] RX error: {e}")
+                    LOGGER.debug("[SERIAL] RX error: %s", e)
                 break
 
     def start_rx(self):
@@ -63,7 +67,7 @@ class SerialAgent:
         frame = build_frame(msg_type, seq, payload)
         self.ser.write(frame)
         name = TYPE_NAMES.get(msg_type, f"0x{msg_type:02X}")
-        print(f"  [TX] {name} seq={seq} payload={payload.hex()}")
+        LOGGER.debug("  [TX] %s seq=%d payload=%s", name, seq, payload.hex())
         return seq
 
     def wait_for_ack(self, expected_seq: int, timeout=1.0) -> bool:
@@ -83,14 +87,14 @@ class SerialAgent:
 
             if msg_type == expected_type and seq == expected_seq:
                 name = TYPE_NAMES.get(msg_type, f"0x{msg_type:02X}")
-                print(f"  [RX] {name} seq={seq} payload={payload.hex()}")
+                LOGGER.debug("  [RX] %s seq=%d payload=%s", name, seq, payload.hex())
                 return payload
 
             name = TYPE_NAMES.get(msg_type, f"0x{msg_type:02X}")
-            print(f"  [RX] Unexpected {name} seq={seq} payload={payload.hex()}")
+            LOGGER.debug("  [RX] Unexpected %s seq=%d payload=%s", name, seq, payload.hex())
 
         name = TYPE_NAMES.get(expected_type, f"0x{expected_type:02X}")
-        print(f"  [TIMEOUT] No {name} for seq={expected_seq}")
+        LOGGER.debug("  [TIMEOUT] No %s for seq=%d", name, expected_seq)
         return None
 
     def drain_rx(self):

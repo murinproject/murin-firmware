@@ -2,6 +2,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <stdbool.h>
 #include "framed_link.h"
 #include "usb_bridge.h"
 
@@ -42,6 +43,9 @@ extern "C"
 
     void ros2_msgs_init(void);
     void ros2_msgs_on_rx(void);
+    void ros2_msgs_set_telemetry_enabled(bool enabled);
+    bool ros2_msgs_get_telemetry_enabled(void);
+    uint64_t ros2_msgs_get_total_runtime_ms(void);
     void ros2_msgs_send_frame(ros2_msgs_ctx_t *msgs, uint8_t msg_type, uint8_t seq, const uint8_t *payload, size_t payload_len);
     void ros2_msgs_send_telemetry(ros2_msgs_ctx_t *msgs, uint8_t seq);
 
