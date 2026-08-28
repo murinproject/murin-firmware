@@ -16,6 +16,8 @@
 #include "flash_storage.h"
 #endif
 
+#include "diag.h"
+
 #if defined(CONFIG_ROS2_TRANSPORT_UART) && CONFIG_ROS2_TRANSPORT_UART
 #include "uart_bridge.h"
 #else
@@ -244,16 +246,16 @@ void ros2_msgs_send_telemetry(ros2_msgs_ctx_t *msgs, uint8_t seq)
 
 static void ros2_msgs_handle_message(ros2_msgs_ctx_t *msgs, uint8_t msg_type, uint8_t seq, const uint8_t *payload, size_t len)
 {
+    diag_log_ros2(msg_type, seq, payload, len);
+
     switch (msg_type)
     {
     case ROS2_MSG_HEARTBEAT:
-        led_set(8, 0, 8);
         ESP_LOGD(TAG, "Received HEARTBEAT seq=%u", seq);
         ros2_msgs_send_ack(msgs, seq);
         break;
 
     case ROS2_MSG_CMD_MOTOR:
-        led_set(8, 8, 0);
         if (len == 4)
         {
             const int16_t left = (int16_t)(payload[0] | (payload[1] << 8));
@@ -268,7 +270,6 @@ static void ros2_msgs_handle_message(ros2_msgs_ctx_t *msgs, uint8_t msg_type, ui
         break;
 
     case ROS2_MSG_CMD_SERVO:
-        led_set(0, 0, 16);
         if (len == 3)
         {
             const uint8_t channel = payload[0];
@@ -283,7 +284,6 @@ static void ros2_msgs_handle_message(ros2_msgs_ctx_t *msgs, uint8_t msg_type, ui
         break;
 
     case ROS2_MSG_CMD_CONFIG:
-        led_set(0, 8, 8);
         if (len == 5)
         {
             const uint8_t key = payload[0];

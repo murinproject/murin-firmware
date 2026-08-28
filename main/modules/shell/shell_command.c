@@ -102,9 +102,9 @@ int stats_command(int argc, char **argv)
 
 int diag_command(int argc, char **argv)
 {
-    if (argc != 3 || strcmp(argv[1], "rp3") != 0)
+    if (argc != 3 || (strcmp(argv[1], "rp3") != 0 && strcmp(argv[1], "ros2") != 0))
     {
-        shell_write("Usage: diag rp3 <1-20>\r\n");
+        shell_write("Usage: diag <rp3|ros2> <1-20>\r\n");
         return 1;
     }
 
@@ -112,30 +112,48 @@ int diag_command(int argc, char **argv)
     unsigned long requested = strtoul(argv[2], &end, 10);
     if (argv[2][0] == '\0' || *end != '\0' || requested == 0 || requested > 20)
     {
-        shell_write("Usage: diag rp3 <1-20>\r\n");
+        shell_write("Usage: diag <rp3|ros2> <1-20>\r\n");
         return 1;
     }
 
-    static rp3_signal_sample_t records[20];
-    size_t record_count = diag_get_rp3_logs(records, requested);
-    shell_printf("RP3 logs: %u record(s)\r\n", (unsigned)record_count);
+    if (strcmp(argv[1], "rp3") == 0)
+    {
+        static rp3_signal_sample_t records[20];
+        size_t record_count = diag_get_rp3_logs(records, requested);
+        shell_printf("RP3 logs: %u record(s)\r\n", (unsigned)record_count);
+        for (size_t i = 0; i < record_count; i++)
+        {
+            const rp3_signal_sample_t *sample = &records[i];
+            shell_printf("%" PRIi64 " us: UL RSSI=%d SNR=%d LQ=%u ANT=%u "
+                         "DL RSSI=%d SNR=%d LQ=%u RF=%u TX=%u\r\n",
+                         sample->timestamp_us, sample->uplink_rssi_dbm, sample->uplink_snr_db,
+                         (unsigned)sample->uplink_link_quality, (unsigned)sample->active_antenna,
+                         sample->downlink_rssi_dbm, sample->downlink_snr_db,
+                         (unsigned)sample->downlink_link_quality, (unsigned)sample->rf_mode,
+                         (unsigned)sample->tx_power);
+            if (sample->rc_channels_valid)
+            {
+                shell_write("  RC:");
+                for (size_t channel = 0; channel < 16; channel++)
+                    shell_printf(" %u", (unsigned)sample->rc_channels[channel]);
+                shell_write("\r\n");
+            }
+        }
+        return 0;
+    }
+
+    static ros2_diag_message_t records[20];
+    size_t record_count = diag_get_ros2_logs(records, requested);
+    shell_printf("ROS2 logs: %u message(s)\r\n", (unsigned)record_count);
     for (size_t i = 0; i < record_count; i++)
     {
-        const rp3_signal_sample_t *sample = &records[i];
-        shell_printf("%" PRIi64 " us: UL RSSI=%d SNR=%d LQ=%u ANT=%u "
-                     "DL RSSI=%d SNR=%d LQ=%u RF=%u TX=%u\r\n",
-                     sample->timestamp_us, sample->uplink_rssi_dbm, sample->uplink_snr_db,
-                     (unsigned)sample->uplink_link_quality, (unsigned)sample->active_antenna,
-                     sample->downlink_rssi_dbm, sample->downlink_snr_db,
-                     (unsigned)sample->downlink_link_quality, (unsigned)sample->rf_mode,
-                     (unsigned)sample->tx_power);
-        if (sample->rc_channels_valid)
-        {
-            shell_write("  RC:");
-            for (size_t channel = 0; channel < 16; channel++)
-                shell_printf(" %u", (unsigned)sample->rc_channels[channel]);
-            shell_write("\r\n");
-        }
+        const ros2_diag_message_t *message = &records[i];
+        shell_printf("%" PRIi64 " us: type=0x%02X seq=%u len=%u payload=",
+                     message->timestamp_us, (unsigned)message->msg_type,
+                     (unsigned)message->seq, (unsigned)message->payload_len);
+        for (size_t byte = 0; byte < message->payload_len; byte++)
+            shell_printf("%02X", (unsigned)message->payload[byte]);
+        shell_write("\r\n");
     }
     return 0;
 }
@@ -147,6 +165,7 @@ int help_command(int argc, char **argv)
     shell_write("Available commands:\r\n");
     shell_write("  stats  Print system status\r\n");
     shell_write("  diag rp3 <1-20>  Print latest RP3 telemetry logs\r\n");
+    shell_write("  diag ros2 <1-20>  Print latest ROS2 messages\r\n");
     shell_write("  set telemetry <true|false>  Enable or disable auto telemetry\r\n");
     shell_write("  get telemetry  Print auto telemetry status\r\n");
     shell_write("  clear  Clear the terminal screen\r\n");
