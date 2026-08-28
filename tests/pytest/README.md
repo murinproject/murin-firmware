@@ -147,6 +147,16 @@ perf_max_p95_ack_ms: 200
 
 Increase `perf_ack_timeout`, `perf_max_avg_ack_ms`, or `perf_max_p95_ack_ms` if the board is running a debug build or the host is under heavy load.
 
+## Stress Test
+
+Run the sustained heartbeat stress test (30 seconds by default):
+
+```bash
+python -m pytest tests/pytest/test_stress.py -v -s
+```
+
+Set `stress_duration_s` in `tests/pytest/test_config.yaml` to change the duration. The test also accepts `stress_ack_timeout` and `stress_ack_retries`; when omitted, those settings fall back to the corresponding performance-test values.
+
 ## Troubleshooting
 
 If tests are skipped, check that `utils/test_config.yaml` has a valid `port`.

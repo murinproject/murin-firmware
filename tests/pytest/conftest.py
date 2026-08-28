@@ -35,7 +35,7 @@ def test_config():
 
 
 @pytest.fixture(scope="session")
-def serial_agent(test_config):
+def serial_agent(test_config, pytestconfig):
     port = test_config.get("cdc_port")
     if not port:
         pytest.skip(f"No serial port configured in {CONFIG_PATH}")
@@ -45,7 +45,14 @@ def serial_agent(test_config):
     try:
         agent.connect()
     except RuntimeError as exc:
-        pytest.skip(str(exc))
+        # pytest hides skip reasons unless ``-rs`` is used.  Print the
+        # connection failure as well so a missing or unavailable COM port is
+        # visible in the normal test output.
+        cause = exc.__cause__
+        detail = f"{exc}: {cause}" if cause else str(exc)
+        message = f"Unable to open serial port {port}: {detail}"
+        pytestconfig.get_terminal_writer().line(message, red=True)
+        pytest.skip(message)
     agent.start_rx()
     time.sleep(0.2)
 

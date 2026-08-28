@@ -123,6 +123,58 @@ NACK frame:
 
 Application-layer errors use the same NACK frame type with application-specific error codes.
 
+## Sequence ownership
+
+`Seq` is an 8-bit identifier allocated independently by each sender and wraps
+from `0xFF` to `0x00`. Command messages sent by the host use one shared host
+sequence counter; the counter is not reset or maintained separately for each
+command type. This makes a request uniquely matchable while it is in flight.
+
+| Message type | Type | Sequence owner | Sequence behavior |
+| --- | ---: | --- | --- |
+| `HEARTBEAT` | `0x00` | Host | Uses the shared host command sequence; response echoes it |
+| `CMD_MOTOR` | `0x01` | Host | Uses the shared host command sequence; response echoes it |
+| `CMD_SERVO` | `0x02` | Host | Uses the shared host command sequence; response echoes it |
+| `TELEMETRY` | `0x03` | Firmware | Uses the firmware telemetry sequence; no ACK is expected |
+| `CMD_CONFIG` | `0x10` | Host | Uses the shared host command sequence; response echoes it |
+| `ACK` | `0x7E` | Responder | Copies the request sequence in the header and payload `[Seq]` |
+| `NACK` | `0x7F` | Responder | Copies the request sequence in the header and payload `[Seq, ErrorCode]` |
+
+The message type and sequence together identify a protocol exchange. A host
+must match an ACK or NACK to the command it sent using the echoed sequence;
+the response type determines whether the command succeeded. Telemetry is an
+asynchronous firmware-to-host stream and is identified by its firmware-owned
+sequence values.
+
+## Request/response sequence
+
+The host sends a framed command to the firmware. The link parser validates the
+frame before dispatching the unstuffed payload to the message handler. Valid
+commands receive an ACK; invalid commands receive a NACK with the request
+sequence and error code. Telemetry is sent asynchronously by the firmware.
+
+```mermaid
+sequenceDiagram
+    participant H as Host
+    participant L as Link parser
+    participant F as Firmware message handler
+
+    H->>L: Frame(SOF, Type, Seq, Length, stuffed Payload, CRC16)
+    L->>L: Find SOF, validate length and CRC
+    alt Invalid CRC or frame length
+        L-->>H: NACK(Seq, error code)
+    else Valid frame
+        L->>L: Unstuff payload
+        L->>F: Dispatch(Type, Seq, Payload)
+        alt Valid command
+            F-->>H: ACK(Seq)
+        else Invalid type or payload
+            F-->>H: NACK(Seq, error code)
+        end
+    end
+    F-->>H: TELEMETRY(Type 0x03, Seq, payload) periodically
+```
+
 ## ROS2 Message Layer
 
 ROS2 message types:

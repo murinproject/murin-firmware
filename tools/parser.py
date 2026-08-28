@@ -177,7 +177,9 @@ class Ros2UsbMonitor:
     def open(self):
         self.ser = serial.Serial(self.port, self.baudrate, timeout=0.05)
         self.ser.dtr = True
-        self.ser.rts = True
+        # RTS is connected to the board reset/boot circuitry. Keep it low so
+        # opening the CDC port does not put the ESP32 into download mode.
+        self.ser.rts = False
         print(f"[SERIAL] Connected to {self.port} @ {self.baudrate}")
 
     def close(self):

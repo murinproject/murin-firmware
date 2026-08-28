@@ -32,7 +32,9 @@ class SerialAgent:
         try:
             self.ser = serial.Serial(self.port, self.baudrate, timeout=0.01)
             self.ser.dtr = True
-            self.ser.rts = True
+            # RTS is connected to the board reset/boot circuitry.  Keep it
+            # deasserted; asserting it can leave the ESP32 in download mode.
+            self.ser.rts = False
             LOGGER.debug("[SERIAL] Connected to %s", self.port)
         except serial.SerialException as e:
             raise RuntimeError(
