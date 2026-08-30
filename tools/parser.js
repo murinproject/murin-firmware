@@ -159,7 +159,7 @@ function parseArgs(argv) {
       case "--motor":
         args.sends.push({
           type: MSG_CMD_MOTOR,
-          payload: encodeMotor(parseInteger(argv[++i], "left"), parseInteger(argv[++i], "right")),
+          payload: encodeMotor(parseFloat(argv[++i], "left"), parseFloat(argv[++i], "right")),
         });
         break;
       case "--servo":
@@ -385,8 +385,8 @@ function decodeFrame({ msgType, seq, payload }) {
   if (msgType === MSG_HEARTBEAT) {
     return `[RX] ${name} seq=${seq}`;
   }
-  if (msgType === MSG_CMD_MOTOR && payload.length === 4) {
-    return `[RX] ${name} seq=${seq} left=${payload.readInt16LE(0)} right=${payload.readInt16LE(2)}`;
+  if (msgType === MSG_CMD_MOTOR && payload.length === 8) {
+    return `[RX] ${name} seq=${seq} left=${payload.readFloatLE(0).toFixed(3)} m/s right=${payload.readFloatLE(4).toFixed(3)} m/s`;
   }
   if (msgType === MSG_CMD_SERVO && payload.length === 3) {
     return `[RX] ${name} seq=${seq} channel=${payload.readUInt8(0)} pulse=${payload.readUInt16LE(1)}`;

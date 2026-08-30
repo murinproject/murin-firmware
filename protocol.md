@@ -182,7 +182,7 @@ ROS2 message types:
 | Type | Value | Payload |
 | --- | ---: | --- |
 | `HEARTBEAT` | `0x00` | Empty |
-| `CMD_MOTOR` | `0x01` | `int16 left_pwm`, `int16 right_pwm` |
+| `CMD_MOTOR` | `0x01` | `float32 left_mps`, `float32 right_mps` |
 | `CMD_SERVO` | `0x02` | `uint8 channel`, `uint16 pulse_us` |
 | `TELEMETRY` | `0x03` | Battery telemetry payload |
 | `CMD_CONFIG` | `0x10` | `uint8 key`, `int32 value` |
@@ -221,17 +221,23 @@ Payload:
 
 | Field | Type | Size |
 | --- | --- | ---: |
-| `left_pwm` | `int16` | 2 bytes |
-| `right_pwm` | `int16` | 2 bytes |
+| `left_mps` | `float32` | 4 bytes |
+| `right_mps` | `float32` | 4 bytes |
 
-Valid payload length: 4 bytes.
+Valid payload length: 8 bytes.
+
+The interface represents velocities up to `-10.0..+10.0 m/s`.
+The current firmware configuration maps the absolute velocity linearly to PWM
+duty: `0.0 m/s` is 0% duty and `0.5 m/s` is 100% duty. Values beyond the
+currently configured `0.5 m/s` limit are clamped until capability negotiation
+is implemented.
 
 Example values:
 
 ```text
-left_pwm  =  512 -> 00 02
-right_pwm = -512 -> 00 FE
-payload          -> 00 02 00 FE
+left_mps  =  0.25 -> 00 00 80 3E
+right_mps = -0.25 -> 00 00 80 BE
+payload           -> 00 00 80 3E 00 00 80 BE
 ```
 
 Example frame with `Seq = 0`:
@@ -333,7 +339,7 @@ The pytest utilities in `utils/protocol_common.py` implement the same frame form
 Motor payload:
 
 ```python
-struct.pack("<hh", left_pwm, right_pwm)
+struct.pack("<ff", left_mps, right_mps)
 ```
 
 Servo payload:

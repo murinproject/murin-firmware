@@ -51,9 +51,10 @@ typedef struct {
  * @brief Initialize battery monitoring system
  * Sets up I2C communication and INA219 calibration using DFRobot's defaults
  *
- * @return esp_err_t ESP_OK on success, error code otherwise
+ * Initialization errors are logged internally; battery telemetry is marked
+ * unavailable when initialization cannot complete.
  */
-esp_err_t battery_init(void);
+void battery_init(void);
 
 /**
  * @brief Read all battery measurements

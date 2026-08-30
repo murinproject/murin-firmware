@@ -15,12 +15,14 @@ import serial
 
 CONFIG_PATH = Path(__file__).with_name("config.yaml")
 
+
 def load_config():
     try:
         with CONFIG_PATH.open("r", encoding="utf-8") as f:
             return yaml.safe_load(f) or {}
     except FileNotFoundError:
         return {}
+
 
 # Add utils directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent / "utils"))
@@ -77,7 +79,9 @@ def parse_hex_payload(value: str) -> bytes:
     cleaned = value.replace("0x", "").replace("0X", "")
     cleaned = "".join(ch for ch in cleaned if not ch.isspace() and ch not in ":-_,")
     if len(cleaned) % 2:
-        raise argparse.ArgumentTypeError("hex payload must contain an even number of digits")
+        raise argparse.ArgumentTypeError(
+            "hex payload must contain an even number of digits"
+        )
     try:
         return bytes.fromhex(cleaned)
     except ValueError as exc:
@@ -140,9 +144,9 @@ def decode_frame(msg_type: int, seq: int, payload: bytes) -> str:
     if msg_type == MSG_HEARTBEAT:
         return f"[RX] {name} seq={seq}"
 
-    if msg_type == MSG_CMD_MOTOR and len(payload) == 4:
-        left, right = struct.unpack("<hh", payload)
-        return f"[RX] {name} seq={seq} left={left} right={right}"
+    if msg_type == MSG_CMD_MOTOR and len(payload) == 8:
+        left, right = struct.unpack("<ff", payload)
+        return f"[RX] {name} seq={seq} left={left:.3f} m/s right={right:.3f} m/s"
 
     if msg_type == MSG_CMD_SERVO and len(payload) == 3:
         channel, pulse = struct.unpack("<BH", payload)
@@ -241,7 +245,10 @@ class Ros2UsbMonitor:
         if self.telemetry_count == 0:
             return "[STATS] Telemetry frames=0 rate=0.00 Hz"
 
-        if self.telemetry_count == 1 or self.telemetry_first_time == self.telemetry_last_time:
+        if (
+            self.telemetry_count == 1
+            or self.telemetry_first_time == self.telemetry_last_time
+        ):
             return "[STATS] Telemetry frames=1 rate=n/a"
 
         duration = self.telemetry_last_time - self.telemetry_first_time
@@ -259,14 +266,18 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Read and send ESP32 framed-link serial messages."
     )
-    parser.add_argument("--port", default=config.get("port"), help="Serial port, e.g. COM11")
+    parser.add_argument(
+        "--port", default=config.get("port"), help="Serial port, e.g. COM11"
+    )
     parser.add_argument(
         "--baudrate",
-        type=int,
+        type=float,
         default=config.get("baudrate", 2_000_000),
         help="Serial baudrate",
     )
-    parser.add_argument("--raw", action="store_true", help="Also print raw serial bytes")
+    parser.add_argument(
+        "--raw", action="store_true", help="Also print raw serial bytes"
+    )
     parser.add_argument(
         "--heartbeat",
         action="store_true",
@@ -275,8 +286,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--motor",
         nargs=2,
-        type=int,
-        metavar=("LEFT", "RIGHT"),
+        type=float,
+        metavar=("LEFT_MPS", "RIGHT_MPS"),
         help="Send one CMD_MOTOR frame after opening the port",
     )
     parser.add_argument(
@@ -311,7 +322,10 @@ def build_arg_parser() -> argparse.ArgumentParser:
 def main() -> int:
     args = build_arg_parser().parse_args()
     if not args.port:
-        print(f"No serial port configured. Pass --port or set it in {CONFIG_PATH}.", file=sys.stderr)
+        print(
+            f"No serial port configured. Pass --port or set it in {CONFIG_PATH}.",
+            file=sys.stderr,
+        )
         return 2
 
     monitor = Ros2UsbMonitor(args.port, args.baudrate, raw=args.raw)
@@ -332,7 +346,9 @@ def main() -> int:
             monitor.send(parse_u8(args.frame[0]), parse_hex_payload(args.frame[1]))
         if args.json is not None:
             json_type = parse_u8(args.json[0])
-            json_payload = json.dumps(json.loads(args.json[1]), separators=(",", ":")).encode("utf-8")
+            json_payload = json.dumps(
+                json.loads(args.json[1]), separators=(",", ":")
+            ).encode("utf-8")
             monitor.send(json_type, json_payload)
 
         print("[SERIAL] Listening. Press Ctrl+C to stop.")

@@ -128,7 +128,7 @@ TEST_F(Ros2MsgsTest, HeartbeatReceivesAcknowledgement)
 
 TEST_F(Ros2MsgsTest, ValidMotorCommandReceivesAcknowledgement)
 {
-    const uint8_t payload[] = {0x34, 0x12, 0x78, 0x56};
+    const uint8_t payload[] = {0x00, 0x00, 0x00, 0x3F, 0x00, 0x00, 0x00, 0xBF};
     const DecodedFrame response = SendToRos(kMotorCommand, 22, payload, sizeof(payload));
 
     ASSERT_EQ(response.count, 1u);

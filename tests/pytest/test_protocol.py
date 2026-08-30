@@ -6,6 +6,8 @@ Usage:
     pytest pytest/test_protocol.py -v
 """
 
+import struct
+
 import pytest
 
 from protocol_common import (
@@ -36,28 +38,30 @@ def test_ros2_heartbeat_command(serial_agent):
 
 
 @pytest.mark.parametrize(
-    ("left_pwm", "right_pwm"),
+    ("left_velocity", "right_velocity"),
     [
-        (512, -512),
+        (0.25, -0.25),
         (0, 0),
-        (32767, -32768),
+        (0.5, -0.5),
     ],
 )
-def test_ros2_motor_command(serial_agent, left_pwm, right_pwm):
-    payload = encode_motor(left_pwm, right_pwm)
+def test_ros2_motor_command(serial_agent, left_velocity, right_velocity):
+    payload = encode_motor(left_velocity, right_velocity)
     seq = serial_agent.send_frame(MSG_CMD_MOTOR, payload)
     assert serial_agent.wait_for_ack(seq)
 
 
 def test_ros2_motor_command_stuffed_payload(serial_agent):
-    # 0x1BAA exercises byte-stuffing for both SOF (0xAA) and ESCAPE (0x1B).
-    payload = encode_motor(0x1BAA, 0)
+    # These valid float32 values contain SOF (0xAA) and ESCAPE (0x1B) bytes.
+    left_velocity = struct.unpack("<f", bytes.fromhex("AA00003E"))[0]
+    right_velocity = struct.unpack("<f", bytes.fromhex("1B0000BE"))[0]
+    payload = encode_motor(left_velocity, right_velocity)
     seq = serial_agent.send_frame(MSG_CMD_MOTOR, payload)
     assert serial_agent.wait_for_ack(seq)
 
 
 def test_motor_command(serial_agent):
-    payload = encode_motor(512, -512)
+    payload = encode_motor(0.25, -0.25)
     seq = serial_agent.send_frame(MSG_CMD_MOTOR, payload)
     assert serial_agent.wait_for_ack(seq)
 

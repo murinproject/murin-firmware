@@ -2,8 +2,10 @@
 
 #include "nvs.h"
 #include "nvs_flash.h"
+#include "esp_log.h"
 
 #define FLASH_STORAGE_NAMESPACE "ros2"
+static const char *TAG = "flash_storage";
 
 const flash_storage_item_t flash_storage_items[FLASH_STORAGE_ITEM_COUNT] = {
     [FLASH_STORAGE_ITEM_TELEMETRY_ENABLED] = {
@@ -38,17 +40,21 @@ const flash_storage_item_t flash_storage_items[FLASH_STORAGE_ITEM_COUNT] = {
     },
 };
 
-esp_err_t flash_storage_init(void)
+void flash_storage_init(void)
 {
     esp_err_t err = nvs_flash_init();
     if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND)
     {
         err = nvs_flash_erase();
         if (err != ESP_OK)
-            return err;
+        {
+            ESP_LOGE(TAG, "Failed to erase NVS: %s", esp_err_to_name(err));
+            return;
+        }
         err = nvs_flash_init();
     }
-    return err;
+    if (err != ESP_OK)
+        ESP_LOGE(TAG, "Failed to initialize NVS: %s", esp_err_to_name(err));
 }
 
 esp_err_t flash_storage_get(flash_storage_item_id_t item, void *data, size_t *size)

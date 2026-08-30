@@ -47,8 +47,11 @@ typedef struct {
     uint16_t rc_channels[16];
 } rp3_receiver_t;
 
+typedef void (*rp3_monitor_fn_t)(const rp3_signal_sample_t *sample);
+
 void rp3_receiver_init(void);
 void rp3_receiver_get_snapshot(rp3_receiver_snapshot_t *snapshot);
+void rp3_receiver_set_monitor(rp3_monitor_fn_t monitor);
 
 #ifdef __cplusplus
 }

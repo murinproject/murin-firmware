@@ -95,8 +95,8 @@ def build_frame(msg_type: int, seq: int, payload: bytes) -> bytes:
     return bytes([SOF]) + header + stuffed + struct.pack("<H", crc_val)
 
 
-def encode_motor(left_pwm: int, right_pwm: int) -> bytes:
-    return struct.pack("<hh", left_pwm, right_pwm)
+def encode_motor(left_mps: float, right_mps: float) -> bytes:
+    return struct.pack("<ff", left_mps, right_mps)
 
 
 def encode_servo(channel: int, pulse_us: int) -> bytes:

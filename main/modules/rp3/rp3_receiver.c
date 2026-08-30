@@ -24,6 +24,7 @@ static const char *TAG = "rp3_receiver";
 #define CRSF_FRAME_TYPE_RC_CHANNELS 0x16
 
 static rp3_receiver_t rp3_receiver;
+static rp3_monitor_fn_t rp3_monitor;
 
 static uint8_t crsf_crc8(const uint8_t *data, size_t len)
 {
@@ -143,6 +144,8 @@ static void rp3_decode_rc_channels(const uint8_t *payload, size_t payload_len)
         taskEXIT_CRITICAL(&rp3_receiver.lock);
 
         diag_log_rp3(&diag_sample);
+        if (rp3_monitor != NULL)
+            rp3_monitor(&diag_sample);
 
         // ESP_LOGI(TAG,
         //          "RP3 RC channels: [%u, %u, %u, %u, %u, %u, %u, %u, "
@@ -270,6 +273,11 @@ void rp3_receiver_init(void)
     spinlock_initialize(&rp3_receiver.lock);
     rp3_uart_init();
     xTaskCreate(rp3_update_job, "rp3_update_job", RP3_JOB_STACK_SIZE, &rp3_receiver, RP3_JOB_PRIORITY, NULL);
+}
+
+void rp3_receiver_set_monitor(rp3_monitor_fn_t monitor)
+{
+    rp3_monitor = monitor;
 }
 
 void rp3_receiver_get_snapshot(rp3_receiver_snapshot_t *snapshot)

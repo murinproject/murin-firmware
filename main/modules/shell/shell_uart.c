@@ -12,6 +12,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "flash_storage.h"
+#include "monitor.h"
 #include "shell_command.h"
 #include "sdkconfig.h"
 
@@ -121,7 +122,7 @@ static void shell_task(void *arg)
     uint8_t escape_state = 0;
     uint8_t ch;
 
-    shell_write("\r\nshell> ");
+    shell_write("\033[?25h\r\nshell> ");
 
     while (true)
     {
@@ -208,6 +209,22 @@ static void shell_task(void *arg)
         if (ch == 0x1b)
         {
             escape_state = 1;
+            continue;
+        }
+
+        /* Allow the live ROS2 monitor to be stopped without a command line. */
+        if ((monitor_is_ros2_enabled() || monitor_is_rp3_enabled() ||
+             monitor_is_diff_drive_enabled()) &&
+            (ch == 0x03 || (ch == 'q' && line_length == 0)))
+        {
+            monitor_set_ros2_enabled(false);
+            monitor_set_rp3_enabled(false);
+            monitor_set_diff_drive_enabled(false);
+            shell_write("\r\033[2K\033[?25hMonitor disabled\r\n");
+            line_length = 0;
+            cursor_pos = 0;
+            history_index = -1;
+            shell_write("shell> ");
             continue;
         }
 
@@ -315,6 +332,12 @@ void shell_uart_init(void)
         .hint = "telemetry",
         .func = &get_command,
     };
+    const esp_console_cmd_t monitor_cmd = {
+        .command = "monitor",
+        .help = "Live monitoring commands",
+        .hint = "<ros2|rp3>",
+        .func = &monitor_command,
+    };
     const esp_console_cmd_t help_cmd = {
         .command = "help",
         .help = "List available commands",
@@ -338,8 +361,10 @@ void shell_uart_init(void)
     ESP_ERROR_CHECK(esp_console_cmd_register(&diag_cmd));
     ESP_ERROR_CHECK(esp_console_cmd_register(&set_cmd));
     ESP_ERROR_CHECK(esp_console_cmd_register(&get_cmd));
+    ESP_ERROR_CHECK(esp_console_cmd_register(&monitor_cmd));
     ESP_ERROR_CHECK(esp_console_cmd_register(&help_cmd));
     ESP_ERROR_CHECK(esp_console_cmd_register(&clear_cmd));
 
+    monitor_init();
     xTaskCreate(shell_task, "shell_uart", SHELL_TASK_STACK_SIZE, NULL, 5, NULL);
 }

@@ -24,6 +24,8 @@
 #include "usb_bridge.h"
 #endif
 
+#include "diff_drive.h"
+
 static const char *TAG = "ros2_msgs";
 
 #define ROS2_MSG_HEARTBEAT 0x00
@@ -61,6 +63,7 @@ static uint32_t telemetry_mask = UINT32_MAX;
 static SemaphoreHandle_t tx_mutex = NULL;
 static TaskHandle_t command_task = NULL;
 static TaskHandle_t telemetry_task = NULL;
+static ros2_msgs_monitor_fn_t ros2_monitor = NULL;
 #ifndef UNIT_TEST
 static TaskHandle_t runtime_task = NULL;
 #endif
@@ -108,6 +111,11 @@ void ros2_msgs_on_rx(void)
     {
         xTaskNotifyGive(command_task);
     }
+}
+
+void ros2_msgs_set_monitor(ros2_msgs_monitor_fn_t monitor)
+{
+    ros2_monitor = monitor;
 }
 
 void ros2_msgs_set_telemetry_enabled(bool enabled)
@@ -247,6 +255,8 @@ void ros2_msgs_send_telemetry(ros2_msgs_ctx_t *msgs, uint8_t seq)
 static void ros2_msgs_handle_message(ros2_msgs_ctx_t *msgs, uint8_t msg_type, uint8_t seq, const uint8_t *payload, size_t len)
 {
     diag_log_ros2(msg_type, seq, payload, len);
+    if (ros2_monitor != NULL)
+        ros2_monitor(msg_type, seq, payload, len);
 
     switch (msg_type)
     {
@@ -256,12 +266,18 @@ static void ros2_msgs_handle_message(ros2_msgs_ctx_t *msgs, uint8_t msg_type, ui
         break;
 
     case ROS2_MSG_CMD_MOTOR:
-        if (len == 4)
+        if (len == 8)
         {
-            const int16_t left = (int16_t)(payload[0] | (payload[1] << 8));
-            const int16_t right = (int16_t)(payload[2] | (payload[3] << 8));
-            ESP_LOGD(TAG, "Received CMD_MOTOR seq=%u left=%d right=%d", seq, left, right);
-            ros2_msgs_send_ack(msgs, seq);
+            float left_mps;
+            float right_mps;
+            memcpy(&left_mps, payload, sizeof(left_mps));
+            memcpy(&right_mps, payload + sizeof(left_mps), sizeof(right_mps));
+            ESP_LOGD(TAG, "Received CMD_MOTOR seq=%u left=%.3f m/s right=%.3f m/s",
+                     seq, left_mps, right_mps);
+            if (motor_set(left_mps, right_mps))
+                ros2_msgs_send_ack(msgs, seq);
+            else
+                ros2_msgs_send_nack(msgs, seq, ROS2_MSG_ERR_RANGE);
         }
         else
         {

@@ -32,6 +32,8 @@ extern "C"
 
     typedef size_t (*ros2_msgs_write_fn_t)(uint8_t *data, size_t len);
     typedef size_t (*ros2_msgs_read_fn_t)(uint8_t *data, size_t len);
+    typedef void (*ros2_msgs_monitor_fn_t)(uint8_t msg_type, uint8_t seq,
+                                           const uint8_t *payload, size_t payload_len);
 
     typedef struct
     {
@@ -43,6 +45,7 @@ extern "C"
 
     void ros2_msgs_init(void);
     void ros2_msgs_on_rx(void);
+    void ros2_msgs_set_monitor(ros2_msgs_monitor_fn_t monitor);
     void ros2_msgs_set_telemetry_enabled(bool enabled);
     bool ros2_msgs_get_telemetry_enabled(void);
     uint64_t ros2_msgs_get_total_runtime_ms(void);

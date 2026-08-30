@@ -12,6 +12,7 @@
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "monitor.h"
 #include "ros2_msgs.h"
 
 int set_command(int argc, char **argv)
@@ -48,6 +49,27 @@ int get_command(int argc, char **argv)
 
     shell_printf("Telemetry %s\r\n",
                  ros2_msgs_get_telemetry_enabled() ? "enabled" : "disabled");
+    return 0;
+}
+
+int monitor_command(int argc, char **argv)
+{
+    if (argc != 2 || (strcmp(argv[1], "ros2") != 0 &&
+                      strcmp(argv[1], "rp3") != 0 &&
+                      strcmp(argv[1], "diff_drive") != 0))
+    {
+        shell_write("Usage: monitor <ros2|rp3|diff_drive>\r\n");
+        return 1;
+    }
+
+    const bool rp3 = strcmp(argv[1], "rp3") == 0;
+    const bool diff_drive = strcmp(argv[1], "diff_drive") == 0;
+    monitor_set_ros2_enabled(!rp3 && !diff_drive);
+    monitor_set_rp3_enabled(rp3);
+    monitor_set_diff_drive_enabled(diff_drive);
+    shell_write("\033[?25l");
+    shell_printf("%s monitor enabled (press q or Ctrl-C to stop)\r\n",
+                 rp3 ? "RP3" : (diff_drive ? "DIFF_DRIVE" : "ROS2"));
     return 0;
 }
 
@@ -102,9 +124,9 @@ int stats_command(int argc, char **argv)
 
 int diag_command(int argc, char **argv)
 {
-    if (argc != 3 || (strcmp(argv[1], "rp3") != 0 && strcmp(argv[1], "ros2") != 0))
+    if (argc != 3 || (strcmp(argv[1], "rp3") != 0 && strcmp(argv[1], "ros2") != 0 && strcmp(argv[1], "system") != 0))
     {
-        shell_write("Usage: diag <rp3|ros2> <1-20>\r\n");
+        shell_write("Usage: diag <rp3|ros2|system> <1-20>\r\n");
         return 1;
     }
 
@@ -112,7 +134,7 @@ int diag_command(int argc, char **argv)
     unsigned long requested = strtoul(argv[2], &end, 10);
     if (argv[2][0] == '\0' || *end != '\0' || requested == 0 || requested > 20)
     {
-        shell_write("Usage: diag <rp3|ros2> <1-20>\r\n");
+        shell_write("Usage: diag <rp3|ros2|system> <1-20>\r\n");
         return 1;
     }
 
@@ -142,6 +164,16 @@ int diag_command(int argc, char **argv)
         return 0;
     }
 
+    if (strcmp(argv[1], "system") == 0)
+    {
+        static diag_system_log_t records[20];
+        size_t record_count = diag_get_system_logs(records, requested);
+        shell_printf("System logs: %u record(s)\r\n", (unsigned)record_count);
+        for (size_t i = 0; i < record_count; i++)
+            shell_printf("%" PRIi64 " us: %s", records[i].timestamp_us, records[i].message);
+        return 0;
+    }
+
     static ros2_diag_message_t records[20];
     size_t record_count = diag_get_ros2_logs(records, requested);
     shell_printf("ROS2 logs: %u message(s)\r\n", (unsigned)record_count);
@@ -166,8 +198,13 @@ int help_command(int argc, char **argv)
     shell_write("  stats  Print system status\r\n");
     shell_write("  diag rp3 <1-20>  Print latest RP3 telemetry logs\r\n");
     shell_write("  diag ros2 <1-20>  Print latest ROS2 messages\r\n");
+    shell_write("  diag system <1-20>  Print latest system logs\r\n");
     shell_write("  set telemetry <true|false>  Enable or disable auto telemetry\r\n");
     shell_write("  get telemetry  Print auto telemetry status\r\n");
+    shell_write("  monitor ros2  Monitor incoming ROS2 commands\r\n");
+    shell_write("  monitor rp3  Monitor RP3 channels\r\n");
+    shell_write("  monitor diff_drive  Monitor motor PWM, brakes, and directions\r\n");
+    shell_write("  q/Ctrl-C  Stop the active monitor\r\n");
     shell_write("  clear  Clear the terminal screen\r\n");
     return 0;
 }

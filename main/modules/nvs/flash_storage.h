@@ -38,7 +38,7 @@ extern "C"
 
     extern const flash_storage_item_t flash_storage_items[FLASH_STORAGE_ITEM_COUNT];
 
-    esp_err_t flash_storage_init(void);
+    void flash_storage_init(void);
     esp_err_t flash_storage_get(flash_storage_item_id_t item, void *data, size_t *size);
     esp_err_t flash_storage_set(flash_storage_item_id_t item, const void *data, size_t size);
 

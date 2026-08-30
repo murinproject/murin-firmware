@@ -116,10 +116,10 @@ static float convert_power(uint16_t raw_register)
     return (float)raw_register * 0.020f;
 }
 
-esp_err_t battery_init(void)
+void battery_init(void)
 {
     if (s_battery_initialized) {
-        return ESP_OK;
+        return;
     }
 
     ESP_LOGI(TAG, "Initializing I2C for battery monitoring (SDA=%d, SCL=%d)",
@@ -137,7 +137,9 @@ esp_err_t battery_init(void)
     esp_err_t ret = i2c_new_master_bus(&bus_config, &s_battery_i2c_bus);
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "Failed to create I2C master bus: %s", esp_err_to_name(ret));
-        return ret;
+        battery_cleanup();
+        s_battery_initialized = true;
+        return;
     }
 
     ret = i2c_master_probe(s_battery_i2c_bus, BATTERY_WATTMETER_I2C_ADDR, BATTERY_I2C_TIMEOUT_MS);
@@ -146,7 +148,7 @@ esp_err_t battery_init(void)
                  BATTERY_WATTMETER_I2C_ADDR, esp_err_to_name(ret));
         battery_cleanup();
         s_battery_initialized = true;
-        return ESP_OK;
+        return;
     }
 
     i2c_device_config_t dev_config = {
@@ -160,7 +162,8 @@ esp_err_t battery_init(void)
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "Failed to add wattmeter device to I2C bus: %s", esp_err_to_name(ret));
         battery_cleanup();
-        return ret;
+        s_battery_initialized = true;
+        return;
     }
 
     s_battery_available = true;
@@ -173,12 +176,11 @@ esp_err_t battery_init(void)
                  esp_err_to_name(ret));
         battery_cleanup();
         s_battery_initialized = true;
-        return ESP_OK;
+        return;
     }
 
     s_battery_initialized = true;
     ESP_LOGI(TAG, "Battery monitoring initialized successfully");
-    return ESP_OK;
 }
 
 esp_err_t battery_read_data(battery_data_t *data)
