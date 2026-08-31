@@ -8,9 +8,10 @@
 #define CONFIG_H
 
 /* MCPWM Configuration */
-#define BDC_MCPWM_TIMER_RESOLUTION_HZ 10000000                                      // 10MHz, 1 tick = 0.1us
-#define BDC_MCPWM_FREQ_HZ 25000                                                     // 25KHz PWM
-#define BDC_MCPWM_DUTY_TICK_MAX (BDC_MCPWM_TIMER_RESOLUTION_HZ / BDC_MCPWM_FREQ_HZ) // maximum value we can set for the duty cycle, in ticks
+#define BDC_MCPWM_TIMER_RESOLUTION_HZ 10000000 // 10MHz, 1 tick = 0.1us
+#define BDC_MCPWM_FREQ_HZ 25000                // 25KHz PWM
+#define BDC_MCPWM_DUTY_TICK_MAX                                                                                        \
+  (BDC_MCPWM_TIMER_RESOLUTION_HZ / BDC_MCPWM_FREQ_HZ) // maximum value we can set for the duty cycle, in ticks
 
 /* Single-pin BLDC PWM Configuration */
 #define BLDC_PWM_FREQ_HZ BDC_MCPWM_FREQ_HZ

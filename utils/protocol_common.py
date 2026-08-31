@@ -52,7 +52,6 @@ ERR_NAMES = {
 }
 
 
-
 def crc16(data: bytes) -> int:
     crc = 0xFFFF
     for b in data:
@@ -155,6 +154,3 @@ class FrameParser:
             frames.append((msg_type, seq, payload))
 
         return frames
-
-
-

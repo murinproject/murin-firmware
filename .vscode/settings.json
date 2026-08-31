@@ -13,5 +13,7 @@
     "--background-index",
     "--query-driver=**",
     "--compile-commands-dir=c:\\Users\\tamin\\mcpwm_bdc_speed_control\\build"
-  ]
+  ],
+  "C_Cpp.clang_format_path": "C:\\Program Files\\LLVM\\bin\\clang-format.exe",
+  "C_Cpp.formatting": "clangFormat"
 }

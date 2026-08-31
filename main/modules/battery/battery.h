@@ -7,44 +7,44 @@
 #ifndef BATTERY_H
 #define BATTERY_H
 
+#include "config.h"
+#include "driver/i2c_master.h"
+#include "esp_err.h"
 #include <stdbool.h>
 #include <stdint.h>
-#include "config.h"
-#include "esp_err.h"
-#include "driver/i2c_master.h"
 
 /* I2C Configuration */
-#define BATTERY_I2C_MASTER_NUM         I2C_NUM_0
-#define BATTERY_I2C_MASTER_SDA_IO      I2C_SDA
-#define BATTERY_I2C_MASTER_SCL_IO      I2C_SCL
-#define BATTERY_I2C_MASTER_FREQ_HZ     100000
-#define BATTERY_I2C_TIMEOUT_MS         1000
+#define BATTERY_I2C_MASTER_NUM I2C_NUM_0
+#define BATTERY_I2C_MASTER_SDA_IO I2C_SDA
+#define BATTERY_I2C_MASTER_SCL_IO I2C_SCL
+#define BATTERY_I2C_MASTER_FREQ_HZ 100000
+#define BATTERY_I2C_TIMEOUT_MS 1000
 
 /* DFRobot INA219 I2C address (A0 = 1, A1 = 1) */
-#define BATTERY_WATTMETER_I2C_ADDR     0x45
+#define BATTERY_WATTMETER_I2C_ADDR 0x45
 
 /* INA219 registers and DFRobot configuration */
-#define BATTERY_REG_CONFIG             0x00
-#define BATTERY_REG_SHUNT_VOLTAGE      0x01
-#define BATTERY_REG_BUS_VOLTAGE        0x02
-#define BATTERY_REG_POWER              0x03
-#define BATTERY_REG_CURRENT             0x04
-#define BATTERY_REG_CALIBRATION        0x05
-#define BATTERY_CONFIG                 0x3FFF  // 32 V, PGA /8, 12-bit x8, continuous
-#define BATTERY_CALIBRATION            4096
+#define BATTERY_REG_CONFIG 0x00
+#define BATTERY_REG_SHUNT_VOLTAGE 0x01
+#define BATTERY_REG_BUS_VOLTAGE 0x02
+#define BATTERY_REG_POWER 0x03
+#define BATTERY_REG_CURRENT 0x04
+#define BATTERY_REG_CALIBRATION 0x05
+#define BATTERY_CONFIG 0x3FFF // 32 V, PGA /8, 12-bit x8, continuous
+#define BATTERY_CALIBRATION 4096
 
 /**
  * @brief Battery measurement data structure
  */
 typedef struct {
-    float voltage;          // Voltage in volts
-    float current;          // Current in amps
-    float power;            // Power in watts
-    float energy;           // Energy in watt-hours
-    uint16_t voltage_raw;   // Raw INA219 bus-voltage register value
-    int16_t current_raw;    // Raw INA219 current register value
-    uint32_t timestamp;     // Timestamp of last measurement
-    bool valid;             // Data validity flag
+  float voltage;        // Voltage in volts
+  float current;        // Current in amps
+  float power;          // Power in watts
+  float energy;         // Energy in watt-hours
+  uint16_t voltage_raw; // Raw INA219 bus-voltage register value
+  int16_t current_raw;  // Raw INA219 current register value
+  uint32_t timestamp;   // Timestamp of last measurement
+  bool valid;           // Data validity flag
 } battery_data_t;
 
 /**

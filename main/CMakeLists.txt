@@ -1,30 +1,44 @@
-idf_component_register(SRCS "app/main.c"
-                            "modules/battery/battery.c"
-                            "modules/led/board_led.c"
-                            "modules/motor/diff_drive.c"
-                            "modules/rp3/rp3_receiver.c"
-                            "modules/link/framed_link.c"
-                            "modules/ros2/ros2_msgs.c"
-                            "modules/monitor/monitor.c"
-                            "modules/shell/shell_uart.c"
-                            "modules/shell/shell_command.c"
-                         #    "modules/uart/uart_bridge.c"
-                            "modules/usb/usb_bridge.c"
-                            "modules/diag/diag.c"
-                            "modules/nvs/flash_storage.c"
-                       PRIV_REQUIRES "esp_driver_rmt" "esp_driver_ledc" "esp_driver_pcnt" "esp_timer" "esp_driver_i2c" "esp_driver_uart" "console" "tinyusb" "nvs_flash"
-                       INCLUDE_DIRS "."
-                                    "config"
-                                    "modules/motor"
-                                    "modules/battery"
-                                    "modules/led"
-                                    "modules/monitor"
-                                    "modules/motor"
-                                    "modules/rp3"
-                                    "modules/link"
-                                    "modules/ros2"
-                                    "modules/shell"
-                                   #  "modules/uart"
-                                    "modules/usb"
-                                    "modules/diag"
-                                    "modules/nvs")
+set(COMPONENT_SRCS
+    "app/main.c"
+    "modules/battery/battery.c"
+    "modules/diag/diag.c"
+    "modules/led/board_led.c"
+    "modules/link/framed_link.c"
+    "modules/monitor/monitor.c"
+    "modules/motor/diff_drive.c"
+    "modules/nvs/flash_storage.c"
+    "modules/ros2/ros2_msgs.c"
+    "modules/rp3/rp3_receiver.c"
+    "modules/shell/shell_command.c"
+    "modules/shell/shell_uart.c"
+    "modules/usb/usb_bridge.c")
+
+set(COMPONENT_INCLUDE_DIRS
+    "."
+    "config"
+    "modules/battery"
+    "modules/diag"
+    "modules/led"
+    "modules/link"
+    "modules/monitor"
+    "modules/motor"
+    "modules/nvs"
+    "modules/ros2"
+    "modules/rp3"
+    "modules/shell"
+    "modules/usb")
+
+set(COMPONENT_PRIV_REQUIRES
+    console
+    esp_driver_i2c
+    esp_driver_ledc
+    esp_driver_pcnt
+    esp_driver_rmt
+    esp_driver_uart
+    esp_timer
+    nvs_flash
+    tinyusb)
+
+idf_component_register(
+  SRCS ${COMPONENT_SRCS} INCLUDE_DIRS ${COMPONENT_INCLUDE_DIRS} PRIV_REQUIRES
+  ${COMPONENT_PRIV_REQUIRES})

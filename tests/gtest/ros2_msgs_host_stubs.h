@@ -13,11 +13,14 @@ typedef unsigned int UBaseType_t;
 typedef unsigned int TickType_t;
 typedef void *TaskHandle_t;
 typedef void *TimerHandle_t;
+typedef void *SemaphoreHandle_t;
 
 #define pdTRUE 1
 #define portMAX_DELAY ((TickType_t)~0u)
 #define CONFIG_TINYUSB_CDC_RX_BUFSIZE 1024
 #define pdMS_TO_TICKS(ms) (ms)
+#define ESP_ERR_NO_MEM -2
+#define ESP_ERROR_CHECK(expr) (void)(expr)
 
 typedef struct
 {
@@ -52,6 +55,7 @@ static inline void led_set(uint32_t red, int32_t green, int32_t blue)
 
 #define ESP_LOGI(tag, fmt, ...) (void)0
 #define ESP_LOGW(tag, fmt, ...) (void)0
+#define ESP_LOGD(tag, fmt, ...) (void)0
 
 static inline BaseType_t xTaskCreate(void (*task)(void *), const char *name,
                                      uint32_t stack_depth, void *arg,
@@ -81,4 +85,24 @@ static inline BaseType_t xTimerStart(TimerHandle_t timer, TickType_t ticks_to_wa
 static inline BaseType_t xTimerStop(TimerHandle_t timer, TickType_t ticks_to_wait)
 {
     (void)timer; (void)ticks_to_wait; return pdTRUE;
+}
+
+static inline SemaphoreHandle_t xSemaphoreCreateMutex(void)
+{
+    return (SemaphoreHandle_t)1;
+}
+
+static inline BaseType_t xSemaphoreTake(SemaphoreHandle_t semaphore, TickType_t ticks_to_wait)
+{
+    (void)semaphore; (void)ticks_to_wait; return pdTRUE;
+}
+
+static inline BaseType_t xSemaphoreGive(SemaphoreHandle_t semaphore)
+{
+    (void)semaphore; return pdTRUE;
+}
+
+static inline BaseType_t xTimerChangePeriod(TimerHandle_t timer, TickType_t period, TickType_t ticks_to_wait)
+{
+    (void)timer; (void)period; (void)ticks_to_wait; return pdTRUE;
 }

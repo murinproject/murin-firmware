@@ -140,6 +140,8 @@ def test_ros2_invalid_config_key(serial_agent):
 
 @pytest.mark.parametrize("value", [9, 5001])
 def test_ros2_config_rate_out_of_range(serial_agent, value):
-    seq = serial_agent.send_frame(MSG_CMD_CONFIG, encode_config(CFG_TELEM_RATE_MS, value))
+    seq = serial_agent.send_frame(
+        MSG_CMD_CONFIG, encode_config(CFG_TELEM_RATE_MS, value)
+    )
     payload = serial_agent.wait_for_nack(seq)
     assert_nack(payload, seq, ERR_RANGE)

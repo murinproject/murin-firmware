@@ -23,9 +23,14 @@ struct WireCapture {
     size_t length = 0;
 };
 
-size_t CaptureWrite(void *context, uint8_t *data, size_t length)
+WireCapture *g_wire_capture = nullptr;
+
+size_t CaptureWrite(uint8_t *data, size_t length)
 {
-    auto *capture = static_cast<WireCapture *>(context);
+    auto *capture = g_wire_capture;
+    if (capture == nullptr) {
+        return 0;
+    }
     if (length > sizeof(capture->bytes)) {
         return 0;
     }
@@ -37,10 +42,10 @@ size_t CaptureWrite(void *context, uint8_t *data, size_t length)
 
 WireCapture *g_ros_response = nullptr;
 
-size_t CaptureRosWrite(void *context, uint8_t *data, size_t length)
+size_t CaptureRosWrite(uint8_t *data, size_t length)
 {
-    (void)context;
-    return CaptureWrite(g_ros_response, data, length);
+    g_wire_capture = g_ros_response;
+    return CaptureWrite(data, length);
 }
 
 struct DecodedFrame {
@@ -79,8 +84,10 @@ protected:
     void SetUp() override
     {
         g_ros_response = &response_;
+        framed_link_init(&messages_.link, CaptureRosWrite, nullptr, nullptr, nullptr);
         messages_.write = CaptureRosWrite;
         ros2_msgs_init();
+        ros2_msgs_test_set_write(CaptureRosWrite);
     }
 
     void TearDown() override { g_ros_response = nullptr; }
@@ -90,10 +97,11 @@ protected:
     {
         WireCapture request;
         framed_link_t host_link{};
-        framed_link_init(&host_link, CaptureWrite, &request, nullptr, nullptr);
+        g_wire_capture = &request;
+        framed_link_init(&host_link, CaptureWrite, nullptr, nullptr, nullptr);
         framed_link_send_frame(&host_link, type, sequence, payload, payload_length);
 
-        framed_link_process(&messages_.link, request.bytes, request.length);
+        ros2_msgs_test_process_frame(request.bytes, request.length);
         return Decode(response_);
     }
 

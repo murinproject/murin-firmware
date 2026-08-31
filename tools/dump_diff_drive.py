@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Send a deterministic differential-drive velocity trajectory to the controller.
 
-    The controller expects ``CMD_MOTOR`` payloads containing two little-endian
-    float32 values: left and right wheel velocities in metres per second.
+The controller expects ``CMD_MOTOR`` payloads containing two little-endian
+float32 values: left and right wheel velocities in metres per second.
 """
 
 import argparse
@@ -41,7 +41,9 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Send a repeating positive/negative equal-wheel velocity trajectory."
     )
-    parser.add_argument("--port", default=config.get("port"), help="Serial port, e.g. COM11")
+    parser.add_argument(
+        "--port", default=config.get("port"), help="Serial port, e.g. COM11"
+    )
     parser.add_argument(
         "--baudrate", type=int, default=config.get("baudrate", 2_000_000)
     )
@@ -73,7 +75,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
         metavar="SECONDS",
         help="Stop after this many seconds; run until Ctrl+C when omitted",
     )
-    parser.add_argument("--once", action="store_true", help="Send the initial trajectory sample and stop")
+    parser.add_argument(
+        "--once",
+        action="store_true",
+        help="Send the initial trajectory sample and stop",
+    )
     parser.add_argument(
         "--rand",
         action="store_true",
@@ -84,11 +90,15 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
 def validate_args(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
     if not args.port:
-        parser.error(f"No serial port configured. Pass --port or set it in {CONFIG_PATH}.")
+        parser.error(
+            f"No serial port configured. Pass --port or set it in {CONFIG_PATH}."
+        )
     if args.interval <= 0:
         parser.error("--interval must be greater than zero")
     if not 0 <= args.max_velocity <= MAX_INTERFACE_SPEED_MPS:
-        parser.error(f"--max-velocity must be in the range 0..{MAX_INTERFACE_SPEED_MPS:g} m/s")
+        parser.error(
+            f"--max-velocity must be in the range 0..{MAX_INTERFACE_SPEED_MPS:g} m/s"
+        )
     if args.duration is not None and args.duration <= 0:
         parser.error("--duration must be greater than zero")
     if abs(args.target_velocity) > args.max_velocity:
@@ -141,13 +151,23 @@ def main() -> int:
                     ),
                 )
             else:
-                samples = ((velocity, velocity) for velocity in phases[phase_index % len(phases)]())
+                samples = (
+                    (velocity, velocity)
+                    for velocity in phases[phase_index % len(phases)]()
+                )
 
             for left, right in samples:
-                if args.duration is not None and time.monotonic() - started >= args.duration:
+                if (
+                    args.duration is not None
+                    and time.monotonic() - started >= args.duration
+                ):
                     break
-                ser.write(build_frame(MSG_CMD_MOTOR, sequence, encode_motor(left, right)))
-                print(f"[TX] CMD_MOTOR seq={sequence} left={left:.3f} right={right:.3f}")
+                ser.write(
+                    build_frame(MSG_CMD_MOTOR, sequence, encode_motor(left, right))
+                )
+                print(
+                    f"[TX] CMD_MOTOR seq={sequence} left={left:.3f} right={right:.3f}"
+                )
                 sequence = (sequence + 1) & 0xFF
                 if args.once:
                     return 0

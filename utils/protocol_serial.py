@@ -37,9 +37,7 @@ class SerialAgent:
             self.ser.rts = False
             LOGGER.debug("[SERIAL] Connected to %s", self.port)
         except serial.SerialException as e:
-            raise RuntimeError(
-                f"Failed to connect to serial port {self.port}"
-            ) from e
+            raise RuntimeError(f"Failed to connect to serial port {self.port}") from e
 
     def _rx_loop(self):
         while not self._stop.is_set():
@@ -93,7 +91,9 @@ class SerialAgent:
                 return payload
 
             name = TYPE_NAMES.get(msg_type, f"0x{msg_type:02X}")
-            LOGGER.debug("  [RX] Unexpected %s seq=%d payload=%s", name, seq, payload.hex())
+            LOGGER.debug(
+                "  [RX] Unexpected %s seq=%d payload=%s", name, seq, payload.hex()
+            )
 
         name = TYPE_NAMES.get(expected_type, f"0x{expected_type:02X}")
         LOGGER.debug("  [TIMEOUT] No %s for seq=%d", name, expected_seq)

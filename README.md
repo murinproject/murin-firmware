@@ -1,118 +1,113 @@
-## Prerequisites
+# Murin Firmware
 
-Install the Python packages used by `parser.py` and the pytest tests:
+Firmware and host-side tools for the Murin ESP32-S3 control system.
 
-```bash
-# in root folder murin-firmware/
-python -m pip install - requirements.txt
+## Table of Contents
+
+- [1. Prerequisites](#1-prerequisites)
+- [2. Build and Run](#2-build-and-run)
+- [3. Tools](#3-tools)
+- [4. Testing](#4-testing)
+  - [4.1 Run all tests](#41-run-all-tests)
+  - [4.2 Test Suite Details](#42-test-suite-details)
+- [5. Code Quality](#5-code-quality)
+  - [5.1 Format code](#51-format-code)
+  - [5.2 Static analysis](#52-static-analysis)
+- [6. Troubleshooting](#6-troubleshooting)
+
+## 1. Prerequisites
+
+Install the Python and Node.js dependencies from the repository root:
+
+```powershell
+python -m pip install -r requirements.txt
 npm install
 ```
 
-Flash the ESP32 firmware before running the monitor or hardware tests, then connect the board over USB.
+## 2. Build and Flash
 
-## Parser Tools
+Activate the ESP-IDF environment in PowerShell before using `idf.py`:
 
-Both parsers read framed-link serial data, decode ROS2 messages, and can send one or more command frames after opening the serial port.
-
-```bash
-python tools/parser.py
-node tools/parser.js
+```powershell
+C:\esp\v6.0\esp-idf\export.ps1
 ```
 
-Print raw serial bytes as they arrive:
+If ESP-IDF is installed in a different location, update the path accordingly.
 
-```bash
-python tools/parser.py --raw
-node tools/parser.js --raw
+Build the firmware with:
+
+```powershell
+idf.py build
 ```
 
-Send ROS2 command frames:
+Flash the firmware and open the monitor with:
 
-```bash
-python tools/parser.py --heartbeat
-python tools/parser.py --motor 512 -512
-python tools/parser.py --servo 0 1500
-python tools/parser.py --config 1 1
-
-node tools/parser.js --heartbeat
-node tools/parser.js --motor 512 -512
-node tools/parser.js --servo 0 1500
-node tools/parser.js --config 1 1
+```powershell
+idf.py flash monitor -p COM10
 ```
 
-You can combine send options. For example, send a heartbeat and disable telemetry:
+Connect the board over USB before running hardware-backed tests or monitor
+tools.
 
-```bash
-python utils/parser.py --heartbeat --config 1 0
-node utils/parser.js --heartbeat --config 1 0
+## 3. Tools
+
+The parser tools, serial configuration, and command examples are documented in
+[`tools/README.md`](tools/README.md).
+
+## 4. Testing
+
+### 4.1 Run all tests
+
+Run pytest and the GoogleTest suite from the repository root:
+
+```powershell
+.\scripts\test-all.ps1
 ```
 
-Send generic framed-link payloads:
+Pass additional arguments to pytest:
 
-```bash
-python utils/parser.py --frame 0x30 "01 02 AA 1B"
-python utils/parser.py --json 0x30 "{\"cmd\":\"motor\",\"left\":512,\"right\":-512}"
-
-node utils/parser.js --frame 0x30 "01 02 AA 1B"
-node utils/parser.js --json 0x30 "{\"cmd\":\"motor\",\"left\":512,\"right\":-512}"
+```powershell
+.\scripts\test-all.ps1 -v
 ```
 
-Decoded output includes ACK/NACK responses, ROS2 command payloads, telemetry values, and printable custom text/JSON payloads.
+### 4.2 Test Suite Details
 
-## Run Tests
+Detailed pytest instructions, configuration, and troubleshooting are
+documented in [`tests/pytest/README.md`](tests/pytest/README.md).
 
-Run all utility tests from the repository root:
+The GoogleTest build and direct commands are documented in
+[`tests/gtest/README.md`](tests/gtest/README.md).
 
-```bash
-python -m pytest utils -v
+## 5. Code Quality
+
+### 5.1 Format code
+
+Run all configured formatters:
+
+```powershell
+.\scripts\format-all.ps1
 ```
 
-Run only the protocol smoke tests:
+The script formats:
 
-```bash
-python -m pytest utils/test_protocol.py -v
+- C/C++ files under `main` with `clang-format`
+- Python files under `tests`, `tools`, and `utils` with Ruff
+- CMake files with `cmake-format`
+
+Install the Python formatters with:
+
+```powershell
+python -m pip install ruff cmakelang
 ```
 
-Run only the performance smoke test and show the latency output:
+The LLVM installation provides `clang-format`.
 
-```bash
-python -m pytest utils/test_perf.py -v -s
+### 5.2 Static analysis
+
+The repository includes [`.clang-tidy`](.clang-tidy). After generating the
+compile database, run clang-tidy with:
+
+```powershell
+idf.py reconfigure
+python "C:\Program Files\LLVM\bin\run-clang-tidy" -p build
 ```
-
-Run one test by name:
-
-```bash
-python -m pytest utils/test_protocol.py::test_heartbeat -v -s
-```
-
-## Performance Test Settings
-
-`test_perf.py` reads optional keys from `utils/test_config.yaml`:
-
-```yaml
-port: "COM11"
-baudrate: 2000000
-perf_iterations: 50
-perf_warmup_iterations: 5
-perf_ack_timeout: 0.5
-perf_max_avg_ack_ms: 50
-perf_max_p95_ack_ms: 200
-```
-
-Increase `perf_ack_timeout`, `perf_max_avg_ack_ms`, or `perf_max_p95_ack_ms` if the board is running a debug build or the host is under heavy load.
-
-## Troubleshooting
-
-If tests are skipped, check that `utils/test_config.yaml` has a valid `port`.
-
-If pytest reports that it cannot open the serial port, close any serial monitor, ESP-IDF monitor, Serial Studio, or other program using the same port.
-
-If ACK tests time out, confirm the ESP32 firmware is running the matching protocol implementation and that the configured baudrate matches the firmware UART/USB serial baudrate.
-
-If imports fail, install the Python dependencies again with:
-
-```bash
-python -m pip install pytest pyserial pyyaml
-```
-
-If tests pass but pytest warns that it cannot write `.pytest_cache`, remove or fix permissions on the repository `.pytest_cache` directory. The warning does not mean the protocol tests failed.
