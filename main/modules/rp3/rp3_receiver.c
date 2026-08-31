@@ -7,12 +7,11 @@
 #include "spinlock.h"
 #include "driver/uart.h"
 #include "diag.h"
+#include "config.h"
 
 static const char *TAG = "rp3_receiver";
 
 #define RP3_UART_PORT UART_NUM_2
-#define RP3_UART_TX_GPIO 1
-#define RP3_UART_RX_GPIO 2
 #define RP3_UART_BAUD_RATE 420000
 #define RP3_UART_RX_BUFFER_SIZE 256
 #define RP3_JOB_STACK_SIZE 4096
@@ -20,8 +19,11 @@ static const char *TAG = "rp3_receiver";
 
 #define CRSF_FRAME_MAX_SIZE 64
 #define CRSF_FRAME_MIN_PAYLOAD_SIZE 2
-#define CRSF_FRAME_TYPE_LINK_STATS 0x14
-#define CRSF_FRAME_TYPE_RC_CHANNELS 0x16
+typedef enum
+{
+    CRSF_FRAME_TYPE_LINK_STATS = 0x14,
+    CRSF_FRAME_TYPE_RC_CHANNELS = 0x16,
+} crsf_frame_type_t;
 
 static rp3_receiver_t rp3_receiver;
 static rp3_monitor_fn_t rp3_monitor;
@@ -218,7 +220,8 @@ static void rp3_uart_init(void)
 
     ESP_ERROR_CHECK(uart_driver_install(RP3_UART_PORT, RP3_UART_RX_BUFFER_SIZE, 0, 0, NULL, 0));
     ESP_ERROR_CHECK(uart_param_config(RP3_UART_PORT, &uart_config));
-    ESP_ERROR_CHECK(uart_set_pin(RP3_UART_PORT, RP3_UART_TX_GPIO, RP3_UART_RX_GPIO, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
+    ESP_ERROR_CHECK(uart_set_pin(RP3_UART_PORT, UART_PIN_NO_CHANGE, RP3_UART_RX_GPIO,
+                                 UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
 }
 
 static void rp3_update_job(void *args)

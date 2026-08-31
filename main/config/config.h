@@ -48,16 +48,16 @@
 #define BDC_PID_MIN_INTEGRAL -1000
 
 /* Motor 1 GPIO pins */
-#define MOT_DIR_1 47
-#define MOT_DIR_2 21
+#define MOT_PWM_1 2
+#define MOT_PWM_2 42
+#define MOT_PWM_3 41
+#define MOT_PWM_4 40
 
-#define MOT_BRAKE_1 38
-#define MOT_BRAKE_2 45
+#define MOT_DIR_1 39
+#define MOT_DIR_2 38
 
-#define MOT_PWM_1 42
-#define MOT_PWM_2 41
-#define MOT_PWM_3 40
-#define MOT_PWM_4 39
+#define MOT_BRAKE_1 47
+#define MOT_BRAKE_2 21
 
 #define MOT_ENC_1 4
 #define MOT_ENC_2 5
@@ -77,6 +77,10 @@
 #define SPI_CLK 11
 #define SPI_MOSI 12
 #define SPI_MISO 13
+
+/* RP3 UART pins */
+#define RP3_UART_RX_GPIO 1
+
 /* BNO085 pins */
 #define BNO085_MOSI SPI_MOSI
 #define BNO085_MISO SPI_MISO

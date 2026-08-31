@@ -28,25 +28,6 @@
 
 static const char *TAG = "ros2_msgs";
 
-#define ROS2_MSG_HEARTBEAT 0x00
-#define ROS2_MSG_CMD_MOTOR 0x01
-#define ROS2_MSG_CMD_SERVO 0x02
-#define ROS2_MSG_TELEMETRY 0x03
-#define ROS2_MSG_CMD_CONFIG 0x10
-#define ROS2_MSG_ACK 0x7E
-#define ROS2_MSG_NACK 0x7F
-
-#define ROS2_CFG_TELEM_ENABLE 1
-#define ROS2_CFG_TELEM_RATE_MS 2
-#define ROS2_CFG_TELEM_MASK 3
-#define ROS2_CFG_TELEM_TIMEOUT_MS 4
-
-#define ROS2_MSG_ERR_CRC 0x01
-#define ROS2_MSG_ERR_LEN 0x02
-#define ROS2_MSG_ERR_TYPE 0x03
-#define ROS2_MSG_ERR_CFG 0x04
-#define ROS2_MSG_ERR_RANGE 0x05
-
 #define ROS2_RUNTIME_SAVE_PERIOD_MS (60 * 1000)
 
 static ros2_msgs_ctx_t ros2_ctx;

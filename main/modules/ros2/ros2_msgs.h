@@ -35,6 +35,34 @@ extern "C"
     typedef void (*ros2_msgs_monitor_fn_t)(uint8_t msg_type, uint8_t seq,
                                            const uint8_t *payload, size_t payload_len);
 
+    typedef enum
+    {
+        ROS2_MSG_HEARTBEAT = 0x00,
+        ROS2_MSG_CMD_MOTOR = 0x01,
+        ROS2_MSG_CMD_SERVO = 0x02,
+        ROS2_MSG_TELEMETRY = 0x03,
+        ROS2_MSG_CMD_CONFIG = 0x10,
+        ROS2_MSG_ACK = 0x7E,
+        ROS2_MSG_NACK = 0x7F,
+    } ros2_msg_type_t;
+
+    typedef enum
+    {
+        ROS2_CFG_TELEM_ENABLE = 0x01,
+        ROS2_CFG_TELEM_RATE_MS = 0x02,
+        ROS2_CFG_TELEM_MASK = 0x03,
+        ROS2_CFG_TELEM_TIMEOUT_MS = 0x04,
+    } ros2_config_id_t;
+
+    typedef enum
+    {
+        ROS2_MSG_ERR_CRC = 0x01,
+        ROS2_MSG_ERR_LEN = 0x02,
+        ROS2_MSG_ERR_TYPE = 0x03,
+        ROS2_MSG_ERR_CFG = 0x04,
+        ROS2_MSG_ERR_RANGE = 0x05,
+    } ros2_error_code_t;
+
     typedef struct
     {
         framed_link_t link;

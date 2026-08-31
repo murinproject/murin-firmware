@@ -8,12 +8,18 @@ extern "C"
 {
 #endif
 
-#define FRAMED_LINK_MSG_ACK 0x7E
-#define FRAMED_LINK_MSG_NACK 0x7F
+typedef enum
+{
+    FRAMED_LINK_MSG_ACK = 0x7E,
+    FRAMED_LINK_MSG_NACK = 0x7F,
+} framed_link_msg_type_t;
 
-#define FRAMED_LINK_ERR_CRC 0x01
-#define FRAMED_LINK_ERR_LEN 0x02
-#define FRAMED_LINK_ERR_FORMAT 0x03
+typedef enum
+{
+    FRAMED_LINK_ERR_CRC = 0x01,
+    FRAMED_LINK_ERR_LEN = 0x02,
+    FRAMED_LINK_ERR_FORMAT = 0x03,
+} framed_link_error_code_t;
 
 #define FRAMED_LINK_MAX_PAYLOAD_LEN 256
 #define FRAMED_LINK_MAX_STUFFED_LEN 512
