@@ -1,6 +1,7 @@
 set(COMPONENT_SRCS
-    "app/main.c"
+    "app/main.cpp"
     "modules/battery/battery.c"
+    "modules/battery/ina219.c"
     "modules/diag/diag.c"
     "modules/led/board_led.c"
     "modules/link/framed_link.c"

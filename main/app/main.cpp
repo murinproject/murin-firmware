@@ -1,3 +1,4 @@
+extern "C" {
 #include "battery.h"
 #include "board_led.h"
 #include "diag.h"
@@ -7,8 +8,9 @@
 #include "rp3_receiver.h"
 #include "shell_uart.h"
 #include "usb_bridge.h"
+}
 
-void app_main(void)
+extern "C" void app_main(void)
 {
   diag_init();
 

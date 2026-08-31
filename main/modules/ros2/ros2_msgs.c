@@ -199,7 +199,7 @@ void ros2_msgs_send_telemetry(ros2_msgs_ctx_t *msgs, uint8_t seq)
   uint8_t payload[256];
   size_t len = 0;
   battery_data_t battery_data;
-  const esp_err_t battery_ret = battery_read_data(&battery_data);
+  const esp_err_t battery_ret = battery_fetch_data(&battery_data);
 
   payload[len++] = (battery_ret == ESP_OK && battery_data.valid) ? 1 : 0;
   payload[len++] = (uint8_t)battery_ret;
@@ -214,10 +214,6 @@ void ros2_msgs_send_telemetry(ros2_msgs_ctx_t *msgs, uint8_t seq)
   len += sizeof(battery_data.power);
   memcpy(payload + len, &battery_data.energy, sizeof(battery_data.energy));
   len += sizeof(battery_data.energy);
-  memcpy(payload + len, &battery_data.voltage_raw, sizeof(battery_data.voltage_raw));
-  len += sizeof(battery_data.voltage_raw);
-  memcpy(payload + len, &battery_data.current_raw, sizeof(battery_data.current_raw));
-  len += sizeof(battery_data.current_raw);
 
   ros2_msgs_send_frame(msgs, ROS2_MSG_TELEMETRY, seq, payload, len);
 }

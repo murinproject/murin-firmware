@@ -114,15 +114,16 @@ int stats_command(int argc, char **argv)
 
 int diag_command(int argc, char **argv)
 {
-  if (argc != 3 || (strcmp(argv[1], "rp3") != 0 && strcmp(argv[1], "ros2") != 0 && strcmp(argv[1], "system") != 0)) {
-    shell_write("Usage: diag <rp3|ros2|system> <1-20>\r\n");
+  if (argc != 3 || (strcmp(argv[1], "rp3") != 0 && strcmp(argv[1], "battery") != 0 && strcmp(argv[1], "ros2") != 0 &&
+                    strcmp(argv[1], "system") != 0)) {
+    shell_write("Usage: diag <rp3|battery|ros2|system> <1-20>\r\n");
     return 1;
   }
 
   char *end = NULL;
   unsigned long requested = strtoul(argv[2], &end, 10);
   if (argv[2][0] == '\0' || *end != '\0' || requested == 0 || requested > 20) {
-    shell_write("Usage: diag <rp3|ros2|system> <1-20>\r\n");
+    shell_write("Usage: diag <rp3|battery|ros2|system> <1-20>\r\n");
     return 1;
   }
 
@@ -144,6 +145,19 @@ int diag_command(int argc, char **argv)
           shell_printf(" %u", (unsigned)sample->rc_channels[channel]);
         shell_write("\r\n");
       }
+    }
+    return 0;
+  }
+
+  if (strcmp(argv[1], "battery") == 0) {
+    static battery_diag_record_t records[20];
+    size_t record_count = diag_get_battery_logs(records, requested);
+    shell_printf("Battery logs: %u record(s)\r\n", (unsigned)record_count);
+    for (size_t i = 0; i < record_count; i++) {
+      const battery_diag_record_t *record = &records[i];
+      shell_printf("%" PRIi64 " us: status=%d valid=%s V=%.3f I=%.3f P=%.3f\r\n", record->timestamp_us,
+                   (int)record->status, record->data.valid ? "YES" : "NO", record->data.voltage, record->data.current,
+                   record->data.power);
     }
     return 0;
   }
@@ -178,6 +192,7 @@ int help_command(int argc, char **argv)
   shell_write("Available commands:\r\n");
   shell_write("  stats  Print system status\r\n");
   shell_write("  diag rp3 <1-20>  Print latest RP3 telemetry logs\r\n");
+  shell_write("  diag battery <1-20>  Print latest battery diagnostics\r\n");
   shell_write("  diag ros2 <1-20>  Print latest ROS2 messages\r\n");
   shell_write("  diag system <1-20>  Print latest system logs\r\n");
   shell_write("  set telemetry <true|false>  Enable or disable auto telemetry\r\n");

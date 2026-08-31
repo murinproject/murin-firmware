@@ -28,13 +28,11 @@ typedef struct
     float current;
     float power;
     float energy;
-    uint16_t voltage_raw;
-    uint16_t current_raw;
     uint32_t timestamp;
     bool valid;
 } battery_data_t;
 
-static inline esp_err_t battery_read_data(battery_data_t *data)
+static inline esp_err_t battery_fetch_data(battery_data_t *data)
 {
     if (data == NULL) return ESP_FAIL;
     data->valid = true;
@@ -43,8 +41,6 @@ static inline esp_err_t battery_read_data(battery_data_t *data)
     data->current = 1.23f;
     data->power = 15.2f;
     data->energy = 123.4f;
-    data->voltage_raw = 1234u;
-    data->current_raw = 2345u;
     return ESP_OK;
 }
 

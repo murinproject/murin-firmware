@@ -89,7 +89,7 @@ def test_shell_commands(console_serial):
     assert re.search(r"(?m)^Heap:\s+free=\d+", stats_output)
 
     diag_output = console_serial.command("diag rp3")
-    assert re.search(r"Usage: diag <rp3\|ros2\|system> <1-20>", diag_output)
+    assert re.search(r"Usage: diag <rp3\|battery\|ros2\|system> <1-20>", diag_output)
     assert re.search(r"Error: command failed \(1\)", diag_output)
 
     clear_output = console_serial.command("clear")

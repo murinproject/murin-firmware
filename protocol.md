@@ -327,10 +327,8 @@ Payload layout:
 | `current` | `float32` | 4 bytes |
 | `power` | `float32` | 4 bytes |
 | `energy` | `float32` | 4 bytes |
-| `voltage_raw` | `uint16` | 2 bytes |
-| `current_raw` | `uint16` | 2 bytes |
 
-Total unstuffed payload length: 26 bytes.
+Total unstuffed payload length: 22 bytes.
 
 ## Python Encoding Reference
 

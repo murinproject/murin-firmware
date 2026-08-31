@@ -13,7 +13,7 @@ Firmware and host-side tools for the Murin ESP32-S3 control system.
 - [5. Code Quality](#5-code-quality)
   - [5.1 Format code](#51-format-code)
   - [5.2 Static analysis](#52-static-analysis)
-- [6. Troubleshooting](#6-troubleshooting)
+- [6. Todo](#6-todo)
 
 ## 1. Prerequisites
 
@@ -111,3 +111,5 @@ compile database, run clang-tidy with:
 idf.py reconfigure
 python "C:\Program Files\LLVM\bin\run-clang-tidy" -p build
 ```
+
+## 6. Todo
