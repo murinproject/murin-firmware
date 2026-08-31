@@ -131,7 +131,7 @@ void ros2_command_task(void *pvParameters)
   ros2_msgs_ctx_t *msgs = (ros2_msgs_ctx_t *)pvParameters;
   static uint8_t rx_buf[CONFIG_TINYUSB_CDC_RX_BUFSIZE];
 
-  ESP_LOGI(TAG, "ros2 command task start");
+  ESP_LOGD(TAG, "ros2 command task start");
 
   while (1) {
     ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(100));
@@ -153,7 +153,7 @@ void ros2_telemetry_task(void *pvParameters)
   ros2_msgs_ctx_t *msgs = (ros2_msgs_ctx_t *)pvParameters;
   msgs->tx_seq = 0;
 
-  ESP_LOGI(TAG, "ros2 telemetry task start");
+  ESP_LOGD(TAG, "ros2 telemetry task start");
 
   while (1) {
     ulTaskNotifyTake(pdTRUE, portMAX_DELAY);

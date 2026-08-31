@@ -9,7 +9,7 @@ message(STATUS "FetchContent base dir: ${FETCHCONTENT_BASE_DIR}")
 FetchContent_Declare(
   googletest
   URL https://github.com/google/googletest/archive/refs/heads/main.zip
-  DOWNLOAD_EXTRACT_TIMESTAMP TRUE)
+      DOWNLOAD_EXTRACT_TIMESTAMP TRUE)
 
 # For Windows: prevent overriding the parent project's compiler/linker settings
 set(gtest_force_shared_crt

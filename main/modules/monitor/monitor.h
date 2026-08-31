@@ -7,12 +7,12 @@ extern "C" {
 #endif
 
 void monitor_init(void);
-void monitor_set_ros2_enabled(bool enabled);
-bool monitor_is_ros2_enabled(void);
-void monitor_set_rp3_enabled(bool enabled);
-bool monitor_is_rp3_enabled(void);
-void monitor_set_diff_drive_enabled(bool enabled);
-bool monitor_is_diff_drive_enabled(void);
+void monitor_ros2_enable(bool enabled);
+bool monitor_ros2_is_enable(void);
+void monitor_rp3_enable(bool enabled);
+bool monitor_rp3_is_enable(void);
+void monitor_diff_drive_enable(bool enabled);
+bool monitor_diff_drive_is_enable(void);
 
 #ifdef __cplusplus
 }

@@ -20,6 +20,8 @@
 #define RP3_MONITOR_UPDATE_PERIOD_US 100000
 #define RP3_CHANNEL_VALUE_MIN 172
 #define RP3_CHANNEL_VALUE_MAX 1811
+#define RP3_CHANNEL_BAR_WIDTH 4
+#define RP3_MONITOR_CHANNEL_COUNT 8
 
 typedef enum {
   MONITOR_EVENT_ROS2,
@@ -43,6 +45,23 @@ static volatile bool s_monitor_enabled;
 static volatile bool s_rp3_monitor_enabled;
 static volatile bool s_diff_drive_monitor_enabled;
 static volatile bool s_rp3_display_started;
+static rp3_signal_sample_t s_rp3_displayed_sample;
+static bool s_rp3_display_valid;
+
+static bool rp3_display_sample_changed(const rp3_signal_sample_t *sample)
+{
+  if (!s_rp3_display_valid || sample->uplink_link_quality != s_rp3_displayed_sample.uplink_link_quality ||
+      sample->uplink_rssi_dbm != s_rp3_displayed_sample.uplink_rssi_dbm ||
+      sample->uplink_snr_db != s_rp3_displayed_sample.uplink_snr_db ||
+      sample->downlink_link_quality != s_rp3_displayed_sample.downlink_link_quality ||
+      sample->downlink_rssi_dbm != s_rp3_displayed_sample.downlink_rssi_dbm ||
+      sample->downlink_snr_db != s_rp3_displayed_sample.downlink_snr_db ||
+      sample->rc_channels_valid != s_rp3_displayed_sample.rc_channels_valid)
+    return true;
+
+  return sample->rc_channels_valid && memcmp(sample->rc_channels, s_rp3_displayed_sample.rc_channels,
+                                             RP3_MONITOR_CHANNEL_COUNT * sizeof(sample->rc_channels[0])) != 0;
+}
 
 static void ros2_monitor_callback(uint8_t msg_type, uint8_t seq, const uint8_t *payload, size_t payload_len)
 {
@@ -96,15 +115,15 @@ static void append_bar(char *line, size_t line_size, size_t *length, uint16_t va
   const uint16_t clamped = value < RP3_CHANNEL_VALUE_MIN
                                ? RP3_CHANNEL_VALUE_MIN
                                : (value > RP3_CHANNEL_VALUE_MAX ? RP3_CHANNEL_VALUE_MAX : value);
-  const unsigned filled =
-      ((unsigned)(clamped - RP3_CHANNEL_VALUE_MIN) * 4U) / (RP3_CHANNEL_VALUE_MAX - RP3_CHANNEL_VALUE_MIN);
+  const unsigned range = RP3_CHANNEL_VALUE_MAX - RP3_CHANNEL_VALUE_MIN;
+  const unsigned filled = ((unsigned)(clamped - RP3_CHANNEL_VALUE_MIN) * RP3_CHANNEL_BAR_WIDTH + range / 2) / range;
   if (*length >= line_size)
     return;
   *length += (size_t)snprintf(line + *length, line_size - *length, "|");
-  for (unsigned i = 0; i < 4; i++) {
+  for (unsigned i = 0; i < RP3_CHANNEL_BAR_WIDTH; i++) {
     if (*length >= line_size)
       return;
-    *length += (size_t)snprintf(line + *length, line_size - *length, "%c", i < filled ? '-' : ' ');
+    *length += (size_t)snprintf(line + *length, line_size - *length, "%c", i < filled ? '#' : ' ');
   }
 }
 
@@ -136,19 +155,42 @@ static void ros2_monitor_task(void *arg)
         continue;
       last_rp3_update_us = now_us;
 
-      size_t length = (size_t)snprintf(line, sizeof(line),
-                                       "%s\r\033[2KLINK UL LQ=%3u RSSI=%4d SNR=%3d | "
-                                       "DL LQ=%3u RSSI=%4d SNR=%3d\r\n\033[2KCH ",
-                                       s_rp3_display_started ? "\033[1A" : "",
-                                       (unsigned)event.data.rp3.uplink_link_quality, event.data.rp3.uplink_rssi_dbm,
-                                       event.data.rp3.uplink_snr_db, (unsigned)event.data.rp3.downlink_link_quality,
-                                       event.data.rp3.downlink_rssi_dbm, event.data.rp3.downlink_snr_db);
-      s_rp3_display_started = true;
-      for (size_t i = 0; i < 8; i++) {
+      if (!rp3_display_sample_changed(&event.data.rp3))
+        continue;
+
+      const bool first_display = !s_rp3_display_started;
+      size_t length = 0;
+      if (first_display) {
+        length = (size_t)snprintf(line, sizeof(line),
+                                  "\r\033[2KLINK | UL LQ | UL RSSI | UL SNR | DL LQ | DL RSSI | DL SNR |\r\n"
+                                  "\033[2K     | %3u   | %4d    | %3d    | %3u   | %4d    | %3d    |\r\n\033[2KCH   ",
+                                  (unsigned)event.data.rp3.uplink_link_quality, event.data.rp3.uplink_rssi_dbm,
+                                  event.data.rp3.uplink_snr_db, (unsigned)event.data.rp3.downlink_link_quality,
+                                  event.data.rp3.downlink_rssi_dbm, event.data.rp3.downlink_snr_db);
+      } else {
+        length = (size_t)snprintf(line, sizeof(line),
+                                  "\033[2F     | %3u   | %4d    | %3d    | %3u   | %4d    | %3d    |\r\n"
+                                  "\033[1B\r     ",
+                                  (unsigned)event.data.rp3.uplink_link_quality, event.data.rp3.uplink_rssi_dbm,
+                                  event.data.rp3.uplink_snr_db, (unsigned)event.data.rp3.downlink_link_quality,
+                                  event.data.rp3.downlink_rssi_dbm, event.data.rp3.downlink_snr_db);
+      }
+      for (size_t i = 0; first_display && i < RP3_MONITOR_CHANNEL_COUNT; i++) {
+        if (length < sizeof(line))
+          length += (size_t)snprintf(line + length, sizeof(line) - length, "|CH%-2u", (unsigned)(i + 1));
+      }
+      if (first_display && length < sizeof(line))
+        length += (size_t)snprintf(line + length, sizeof(line) - length, "|");
+      if (first_display && length < sizeof(line))
+        length += (size_t)snprintf(line + length, sizeof(line) - length, "\r\n\033[2K     ");
+      for (size_t i = 0; i < RP3_MONITOR_CHANNEL_COUNT; i++) {
         append_bar(line, sizeof(line), &length, event.data.rp3.rc_channels_valid ? event.data.rp3.rc_channels[i] : 0);
       }
       if (length < sizeof(line))
         length += (size_t)snprintf(line + length, sizeof(line) - length, "|\r");
+      s_rp3_displayed_sample = event.data.rp3;
+      s_rp3_display_valid = true;
+      s_rp3_display_started = true;
       shell_write(line);
       continue;
     }
@@ -207,31 +249,33 @@ void monitor_init(void)
   }
 }
 
-void monitor_set_ros2_enabled(bool enabled)
+void monitor_ros2_enable(bool enabled)
 {
   s_monitor_enabled = enabled;
   if (!enabled && s_monitor_queue != NULL)
     xQueueReset(s_monitor_queue);
 }
 
-void monitor_set_rp3_enabled(bool enabled)
+void monitor_rp3_enable(bool enabled)
 {
   s_rp3_monitor_enabled = enabled;
   if (!enabled)
     s_rp3_display_started = false;
+  if (!enabled)
+    s_rp3_display_valid = false;
   if (!enabled && s_monitor_queue != NULL)
     xQueueReset(s_monitor_queue);
 }
 
-bool monitor_is_rp3_enabled(void) { return s_rp3_monitor_enabled; }
+bool monitor_rp3_is_enable(void) { return s_rp3_monitor_enabled; }
 
-bool monitor_is_ros2_enabled(void) { return s_monitor_enabled; }
+bool monitor_ros2_is_enable(void) { return s_monitor_enabled; }
 
-void monitor_set_diff_drive_enabled(bool enabled)
+void monitor_diff_drive_enable(bool enabled)
 {
   s_diff_drive_monitor_enabled = enabled;
   if (!enabled && s_monitor_queue != NULL)
     xQueueReset(s_monitor_queue);
 }
 
-bool monitor_is_diff_drive_enabled(void) { return s_diff_drive_monitor_enabled; }
+bool monitor_diff_drive_is_enable(void) { return s_diff_drive_monitor_enabled; }

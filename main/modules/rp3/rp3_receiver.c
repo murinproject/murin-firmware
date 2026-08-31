@@ -85,6 +85,8 @@ static void rp3_decode_link_statistics(const uint8_t *payload, size_t payload_le
   sample = rp3_receiver.latest_signal;
   taskEXIT_CRITICAL(&rp3_receiver.lock);
   diag_log_rp3(&sample);
+  if (rp3_monitor != NULL)
+    rp3_monitor(&sample);
 }
 
 static void rp3_decode_rc_channels(const uint8_t *payload, size_t payload_len)

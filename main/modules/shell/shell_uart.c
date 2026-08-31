@@ -180,16 +180,17 @@ static void shell_task(void *arg)
     }
 
     /* Allow the live ROS2 monitor to be stopped without a command line. */
-    if ((monitor_is_ros2_enabled() || monitor_is_rp3_enabled() || monitor_is_diff_drive_enabled()) &&
+    if ((monitor_ros2_is_enable() || monitor_rp3_is_enable() || monitor_diff_drive_is_enable()) &&
         (ch == 0x03 || (ch == 'q' && line_length == 0))) {
-      monitor_set_ros2_enabled(false);
-      monitor_set_rp3_enabled(false);
-      monitor_set_diff_drive_enabled(false);
-      shell_write("\r\033[2K\033[?25hMonitor disabled\r\n");
+      monitor_ros2_enable(false);
+      monitor_rp3_enable(false);
+      monitor_diff_drive_enable(false);
+      shell_write("\r\n\033[2K\033[?25hMonitor disabled\r\n");
       line_length = 0;
       cursor_pos = 0;
       history_index = -1;
-      shell_write("shell> ");
+      if (!monitor_ros2_is_enable() && !monitor_rp3_is_enable() && !monitor_diff_drive_is_enable())
+        shell_write("shell> ");
       continue;
     }
 
@@ -200,13 +201,16 @@ static void shell_task(void *arg)
       shell_write("\r\n");
 
       if (line_length > 0) {
-        size_t entries_to_move = history_count < SHELL_HISTORY_SIZE ? history_count : SHELL_HISTORY_SIZE - 1;
-        if (entries_to_move > 0)
-          memmove(history[1], history[0], entries_to_move * sizeof(history[0]));
-        memcpy(history[0], line, line_length + 1);
-        if (history_count < SHELL_HISTORY_SIZE)
-          history_count++;
-        shell_history_save(history, history_count);
+        const bool command_differs_from_last = history_count == 0 || strcmp(history[0], line) != 0;
+        if (command_differs_from_last) {
+          size_t entries_to_move = history_count < SHELL_HISTORY_SIZE ? history_count : SHELL_HISTORY_SIZE - 1;
+          if (entries_to_move > 0)
+            memmove(history[1], history[0], entries_to_move * sizeof(history[0]));
+          memcpy(history[0], line, line_length + 1);
+          if (history_count < SHELL_HISTORY_SIZE)
+            history_count++;
+          shell_history_save(history, history_count);
+        }
         parse_ret = esp_console_run(line, &command_ret);
       }
 

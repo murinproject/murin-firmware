@@ -51,7 +51,9 @@ class ConsoleSerial:
 def console_serial(test_config, pytestconfig):
     port = test_config.get("console_port")
     if not port:
-        pytest.fail("No console_port configured in tests/pytest/test_config.yaml", pytrace=False)
+        pytest.fail(
+            "No console_port configured in tests/pytest/test_config.yaml", pytrace=False
+        )
 
     # shell_uart.c defaults to CONFIG_ROS2_TRANSPORT_UART_BAUD_RATE, which
     # defaults to 115200. Keep this independent from the USB protocol baudrate.

@@ -58,9 +58,9 @@ int monitor_command(int argc, char **argv)
 
   const bool rp3 = strcmp(argv[1], "rp3") == 0;
   const bool diff_drive = strcmp(argv[1], "diff_drive") == 0;
-  monitor_set_ros2_enabled(!rp3 && !diff_drive);
-  monitor_set_rp3_enabled(rp3);
-  monitor_set_diff_drive_enabled(diff_drive);
+  monitor_ros2_enable(!rp3 && !diff_drive);
+  monitor_rp3_enable(rp3);
+  monitor_diff_drive_enable(diff_drive);
   shell_write("\033[?25l");
   shell_printf("%s monitor enabled (press q or Ctrl-C to stop)\r\n",
                rp3 ? "RP3" : (diff_drive ? "DIFF_DRIVE" : "ROS2"));
