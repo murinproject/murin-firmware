@@ -26,6 +26,14 @@ typedef struct {
   uint32_t last_command_time_ms;
 } diff_drive_state_t;
 
+typedef struct {
+  uint32_t timestamp_ms;
+  float linear_velocity;  // m/s
+  float angular_velocity; // rad/s
+  float left_velocity;    // m/s
+  float right_velocity;   // m/s
+} drive_state_t;
+
 typedef void (*motor_monitor_fn_t)(const diff_drive_state_t *state);
 
 void motor_init(void);

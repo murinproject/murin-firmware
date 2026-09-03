@@ -146,6 +146,30 @@ TEST_F(Ros2MsgsTest, ImuTelemetryUsesDedicatedMessageTypeAndPayload)
   EXPECT_FLOAT_EQ(quaternion[3], 0.4f);
 }
 
+TEST_F(Ros2MsgsTest, DriveTelemetryUsesDedicatedMessageTypeAndPayload)
+{
+  const drive_state_t state = {1234, 1.5f, -0.25f, 0.75f, 2.0f};
+  ros2_msgs_send_drive_state(&messages_, 19, &state);
+
+  const DecodedFrame decoded = Decode(response_);
+  ASSERT_EQ(decoded.count, 1u);
+  EXPECT_EQ(decoded.type, ROS2_MSG_TELEMETRY_DRIVE_STATE);
+  EXPECT_EQ(decoded.sequence, 19);
+  ASSERT_EQ(decoded.payload_length, ROS2_TELEMETRY_DRIVE_STATE_PAYLOAD_SIZE);
+
+  drive_state_t decoded_state{};
+  std::memcpy(&decoded_state.timestamp_ms, decoded.payload, sizeof(decoded_state.timestamp_ms));
+  std::memcpy(&decoded_state.linear_velocity, decoded.payload + 4, sizeof(decoded_state.linear_velocity));
+  std::memcpy(&decoded_state.angular_velocity, decoded.payload + 8, sizeof(decoded_state.angular_velocity));
+  std::memcpy(&decoded_state.left_velocity, decoded.payload + 12, sizeof(decoded_state.left_velocity));
+  std::memcpy(&decoded_state.right_velocity, decoded.payload + 16, sizeof(decoded_state.right_velocity));
+  EXPECT_EQ(decoded_state.timestamp_ms, state.timestamp_ms);
+  EXPECT_FLOAT_EQ(decoded_state.linear_velocity, state.linear_velocity);
+  EXPECT_FLOAT_EQ(decoded_state.angular_velocity, state.angular_velocity);
+  EXPECT_FLOAT_EQ(decoded_state.left_velocity, state.left_velocity);
+  EXPECT_FLOAT_EQ(decoded_state.right_velocity, state.right_velocity);
+}
+
 TEST_F(Ros2MsgsTest, HeartbeatReceivesAcknowledgement)
 {
   const DecodedFrame response = SendToRos(kHeartbeat, 21, nullptr, 0);

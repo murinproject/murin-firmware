@@ -14,6 +14,7 @@ MSG_CMD_SERVO = 0x02
 MSG_TELEMETRY_BATTERY = 0x03
 MSG_TELEMETRY = MSG_TELEMETRY_BATTERY  # Backward-compatible name.
 MSG_TELEMETRY_IMU = 0x04
+MSG_TELEMETRY_DRIVE_STATE = 0x05
 MSG_CMD_CONFIG = 0x10
 MSG_DATA_IMU = 0x20
 MSG_DATA_ENC = 0x21
@@ -26,6 +27,7 @@ TYPE_NAMES = {
     MSG_CMD_SERVO: "CMD_SERVO",
     MSG_TELEMETRY_BATTERY: "TELEMETRY_BATTERY",
     MSG_TELEMETRY_IMU: "TELEMETRY_IMU",
+    MSG_TELEMETRY_DRIVE_STATE: "TELEMETRY_DRIVE_STATE",
     MSG_CMD_CONFIG: "CMD_CONFIG",
     MSG_DATA_IMU: "DATA_IMU",
     MSG_DATA_ENC: "DATA_ENC",
@@ -47,11 +49,14 @@ CFG_TELEM_TIMEOUT_MS = 4
 
 TELEM_MASK_BATTERY = 1 << 0
 TELEM_MASK_IMU = 1 << 1
+TELEM_MASK_DRIVE_STATE = 1 << 3
 
 BATTERY_TELEMETRY_FORMAT = "<BBIffff"
 IMU_TELEMETRY_FORMAT = "<BBq13f"
 BATTERY_TELEMETRY_SIZE = struct.calcsize(BATTERY_TELEMETRY_FORMAT)
 IMU_TELEMETRY_SIZE = struct.calcsize(IMU_TELEMETRY_FORMAT)
+DRIVE_STATE_TELEMETRY_FORMAT = "<Iffff"
+DRIVE_STATE_TELEMETRY_SIZE = struct.calcsize(DRIVE_STATE_TELEMETRY_FORMAT)
 
 ERR_NAMES = {
     ERR_OK: "OK",
@@ -153,6 +158,25 @@ def decode_imu_telemetry(payload: bytes) -> dict:
         "angular_velocity_rad_s": values[6:9],
         "magnetic_field_uT": values[9:12],
         "quaternion_wxyz": values[12:16],
+    }
+
+
+def decode_drive_state_telemetry(payload: bytes) -> dict:
+    if len(payload) != DRIVE_STATE_TELEMETRY_SIZE:
+        raise ValueError(
+            f"drive-state telemetry must be {DRIVE_STATE_TELEMETRY_SIZE} bytes, "
+            f"got {len(payload)}"
+        )
+
+    timestamp_ms, linear_velocity, angular_velocity, left_velocity, right_velocity = (
+        struct.unpack(DRIVE_STATE_TELEMETRY_FORMAT, payload)
+    )
+    return {
+        "timestamp_ms": timestamp_ms,
+        "linear_velocity": linear_velocity,
+        "angular_velocity": angular_velocity,
+        "left_velocity": left_velocity,
+        "right_velocity": right_velocity,
     }
 
 

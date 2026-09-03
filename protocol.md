@@ -358,6 +358,7 @@ Invalid responses:
 | ---: | --- | --- |
 | 0 | `TELEM_MASK_BATTERY` | Enable `TELEMETRY_BATTERY` |
 | 1 | `TELEM_MASK_IMU` | Enable `TELEMETRY_IMU` |
+| 3 | `TELEM_MASK_DRIVE_STATE` | Enable `TELEMETRY_DRIVE_STATE` |
 
 ### TELEMETRY_BATTERY
 
@@ -397,6 +398,23 @@ Payload layout (little-endian):
 | `quaternion_wxyz[4]` | `float32[4]` | 16 bytes |
 
 Total unstuffed payload length: 62 bytes.
+
+### TELEMETRY_DRIVE_STATE
+
+Drive-state telemetry is sent periodically at `TELEM_RATE_MS` when bit 3 is
+enabled in `TELEM_MASK`.
+
+Payload layout (little-endian):
+
+| Field | Type | Size |
+| --- | --- | ---: |
+| `timestamp_ms` | `uint32` | 4 bytes |
+| `linear_velocity` | `float32` | 4 bytes |
+| `angular_velocity` | `float32` | 4 bytes |
+| `left_velocity` | `float32` | 4 bytes |
+| `right_velocity` | `float32` | 4 bytes |
+
+Total unstuffed payload length: 20 bytes.
 
 ## Python Encoding Reference
 

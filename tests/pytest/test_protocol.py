@@ -24,10 +24,13 @@ from protocol_common import (
     MSG_CMD_SERVO,
     MSG_HEARTBEAT,
     MSG_TELEMETRY_BATTERY,
+    MSG_TELEMETRY_DRIVE_STATE,
     MSG_TELEMETRY_IMU,
     TELEM_MASK_BATTERY,
+    TELEM_MASK_DRIVE_STATE,
     TELEM_MASK_IMU,
     decode_battery_telemetry,
+    decode_drive_state_telemetry,
     decode_imu_telemetry,
     encode_config,
     encode_motor,
@@ -115,11 +118,10 @@ def test_config_command(serial_agent):
     assert serial_agent.wait_for_ack(seq)
 
 
-def test_ros2_battery_and_imu_telemetry(serial_agent):
+def enable_telemetry(serial_agent, telemetry_mask):
     seq = serial_agent.send_frame(MSG_CMD_CONFIG, encode_config(CFG_TELEM_RATE_MS, 20))
     assert serial_agent.wait_for_ack(seq)
 
-    telemetry_mask = TELEM_MASK_BATTERY | TELEM_MASK_IMU
     seq = serial_agent.send_frame(
         MSG_CMD_CONFIG, encode_config(CFG_TELEM_MASK, telemetry_mask)
     )
@@ -127,6 +129,10 @@ def test_ros2_battery_and_imu_telemetry(serial_agent):
 
     seq = serial_agent.send_frame(MSG_CMD_CONFIG, encode_config(CFG_TELEM_ENABLE, 1))
     assert serial_agent.wait_for_ack(seq)
+
+
+def test_ros2_battery_telemetry(serial_agent):
+    enable_telemetry(serial_agent, TELEM_MASK_BATTERY)
 
     battery_frame = serial_agent.wait_for_type(MSG_TELEMETRY_BATTERY, timeout=2.0)
     assert battery_frame is not None, "no battery telemetry frame received"
@@ -138,6 +144,10 @@ def test_ros2_battery_and_imu_telemetry(serial_agent):
         math.isfinite(battery[field])
         for field in ("voltage", "current", "power", "energy")
     )
+
+
+def test_ros2_imu_telemetry(serial_agent):
+    enable_telemetry(serial_agent, TELEM_MASK_IMU)
 
     imu_frame = serial_agent.wait_for_type(MSG_TELEMETRY_IMU, timeout=2.0)
     assert imu_frame is not None, "no IMU telemetry frame received"
@@ -156,6 +166,30 @@ def test_ros2_battery_and_imu_telemetry(serial_agent):
     assert all(math.isfinite(value) for value in vectors)
     quaternion_norm = math.sqrt(sum(value * value for value in imu["quaternion_wxyz"]))
     assert quaternion_norm == pytest.approx(1.0, abs=0.1)
+
+
+def test_ros2_drive_state_telemetry(serial_agent):
+    enable_telemetry(serial_agent, TELEM_MASK_DRIVE_STATE)
+
+    command_left = 0.25
+    command_right = -0.25
+    seq = serial_agent.send_frame(
+        MSG_CMD_MOTOR, encode_motor(command_left, command_right)
+    )
+    assert serial_agent.wait_for_ack(seq)
+
+    drive_frame = serial_agent.wait_for_type(MSG_TELEMETRY_DRIVE_STATE, timeout=2.0)
+    assert drive_frame is not None, "no drive-state telemetry frame received"
+    _, drive_payload = drive_frame
+    drive = decode_drive_state_telemetry(drive_payload)
+
+    assert drive["timestamp_ms"] > 0
+    assert drive["linear_velocity"] == pytest.approx(
+        (command_left + command_right) / 2.0, abs=0.05
+    )
+    assert drive["left_velocity"] == pytest.approx(command_left, abs=0.05)
+    assert drive["right_velocity"] == pytest.approx(command_right, abs=0.05)
+    assert math.isfinite(drive["angular_velocity"])
 
 
 def test_invalid_command(serial_agent):

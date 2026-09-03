@@ -50,6 +50,14 @@ typedef void (*navigation_telemetry_callback_t)(const navigation_imu_sample_t *s
 
 static inline void navigation_set_telemetry_callback(navigation_telemetry_callback_t callback) { (void)callback; }
 
+static inline void motor_get(float *left_mps, float *right_mps)
+{
+  if (left_mps != NULL)
+    *left_mps = 0.25f;
+  if (right_mps != NULL)
+    *right_mps = -0.5f;
+}
+
 static inline esp_err_t battery_fetch_data(battery_data_t *data)
 {
   if (data == NULL)

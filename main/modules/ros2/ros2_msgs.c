@@ -49,6 +49,7 @@ static TaskHandle_t telemetry_task = NULL;
 static ros2_msgs_monitor_fn_t ros2_monitor = NULL;
 static QueueHandle_t imu_state_tx_queue = NULL;
 static QueueHandle_t battery_state_tx_queue = NULL;
+static QueueHandle_t drive_state_tx_queue = NULL;
 #ifndef UNIT_TEST
 static TaskHandle_t runtime_task = NULL;
 #endif
@@ -56,6 +57,7 @@ static TaskHandle_t runtime_task = NULL;
 static size_t ros2_msgs_read(ros2_msgs_ctx_t *msgs, uint8_t *data, size_t len);
 static void ros2_msgs_handle_frame(void *ctx, uint8_t msg_type, uint8_t seq, const uint8_t *payload, size_t len);
 static void ros2_msgs_send_imu_state_sample(ros2_msgs_ctx_t *msgs, uint8_t seq, const navigation_imu_sample_t *sample);
+static void ros2_msgs_queue_drive_state(void);
 
 #ifndef UNIT_TEST
 static void ros2_msgs_load_settings(void)
@@ -90,6 +92,7 @@ static void telemetry_timer_cb(TimerHandle_t xTimer)
     const uint8_t pending = 1;
     if (battery_state_tx_queue != NULL)
       xQueueOverwrite(battery_state_tx_queue, &pending);
+    ros2_msgs_queue_drive_state();
     xTaskNotifyGive(telemetry_task);
   }
 }
@@ -102,6 +105,20 @@ static void ros2_imu_state_callback(const navigation_imu_sample_t *sample)
   if (imu_state_tx_queue != NULL)
     xQueueOverwrite(imu_state_tx_queue, sample);
   xTaskNotifyGive(telemetry_task);
+}
+
+static void ros2_msgs_queue_drive_state(void)
+{
+  drive_state_t state = {0};
+  motor_get(&state.left_velocity, &state.right_velocity);
+  state.timestamp_ms = (uint32_t)ros2_msgs_get_total_runtime_ms();
+  state.linear_velocity = (state.left_velocity + state.right_velocity) * 0.5f;
+  /* The schema has no wheel-track field, so preserve the signed velocity
+   * difference as the available
+   * rotational-motion value. */
+  state.angular_velocity = state.right_velocity - state.left_velocity;
+  if (drive_state_tx_queue != NULL)
+    xQueueOverwrite(drive_state_tx_queue, &state);
 }
 
 void ros2_msgs_on_rx(void)
@@ -188,6 +205,11 @@ void ros2_telemetry_task(void *pvParameters)
       if (telemetry_enabled && (telemetry_mask & ROS2_TELEM_MASK_BATTERY_STATE) != 0)
         ros2_msgs_send_battery_state(msgs, msgs->tx_seq++);
     }
+    drive_state_t drive_state;
+    while (xQueueReceive(drive_state_tx_queue, &drive_state, 0) == pdTRUE) {
+      if (telemetry_enabled && (telemetry_mask & ROS2_TELEM_MASK_DRIVE_STATE) != 0)
+        ros2_msgs_send_drive_state(msgs, msgs->tx_seq++, &drive_state);
+    }
     // ESP_LOGI(TAG, "Sending telemetry %u", msgs->tx_seq);
   }
 }
@@ -245,6 +267,26 @@ void ros2_msgs_send_battery_state(ros2_msgs_ctx_t *msgs, uint8_t seq)
   len += sizeof(battery_data.energy);
 
   ros2_msgs_send_frame(msgs, ROS2_MSG_TELEMETRY_BATTERY_STATE, seq, payload, len);
+}
+
+void ros2_msgs_send_drive_state(ros2_msgs_ctx_t *msgs, uint8_t seq, const drive_state_t *state)
+{
+  if (state == NULL)
+    return;
+
+  uint8_t payload[ROS2_TELEMETRY_DRIVE_STATE_PAYLOAD_SIZE];
+  size_t len = 0;
+  memcpy(payload + len, &state->timestamp_ms, sizeof(state->timestamp_ms));
+  len += sizeof(state->timestamp_ms);
+  memcpy(payload + len, &state->linear_velocity, sizeof(state->linear_velocity));
+  len += sizeof(state->linear_velocity);
+  memcpy(payload + len, &state->angular_velocity, sizeof(state->angular_velocity));
+  len += sizeof(state->angular_velocity);
+  memcpy(payload + len, &state->left_velocity, sizeof(state->left_velocity));
+  len += sizeof(state->left_velocity);
+  memcpy(payload + len, &state->right_velocity, sizeof(state->right_velocity));
+  len += sizeof(state->right_velocity);
+  ros2_msgs_send_frame(msgs, ROS2_MSG_TELEMETRY_DRIVE_STATE, seq, payload, len);
 }
 
 static void ros2_msgs_send_imu_state_sample(ros2_msgs_ctx_t *msgs, uint8_t seq, const navigation_imu_sample_t *imu)
@@ -420,6 +462,8 @@ void ros2_msgs_init(void)
   ESP_ERROR_CHECK(imu_state_tx_queue != NULL ? ESP_OK : ESP_ERR_NO_MEM);
   battery_state_tx_queue = xQueueCreate(1, sizeof(uint8_t));
   ESP_ERROR_CHECK(battery_state_tx_queue != NULL ? ESP_OK : ESP_ERR_NO_MEM);
+  drive_state_tx_queue = xQueueCreate(1, sizeof(drive_state_t));
+  ESP_ERROR_CHECK(drive_state_tx_queue != NULL ? ESP_OK : ESP_ERR_NO_MEM);
 
   telemetry_timer = xTimerCreate("telemetry_tmr", pdMS_TO_TICKS(telemetry_period_ms), pdTRUE, /* auto reload */
                                  NULL, telemetry_timer_cb);

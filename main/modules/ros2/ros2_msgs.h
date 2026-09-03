@@ -1,5 +1,6 @@
 #pragma once
 
+#include "diff_drive.h"
 #include "framed_link.h"
 #include "usb_bridge.h"
 #include <stdbool.h>
@@ -36,7 +37,7 @@ typedef void (*ros2_msgs_monitor_fn_t)(uint8_t msg_type, uint8_t seq, const uint
 /*
  * Telemetry publishers:
  *   RobotState  - TODO
- *   DriveState  - TODO
+ *   DriveState  - implemented
  *   BatteryState - implemented
  * ImuState
  * - implemented
@@ -48,6 +49,7 @@ typedef enum {
   ROS2_MSG_CMD_SERVO = 0x02,
   ROS2_MSG_TELEMETRY_BATTERY_STATE = 0x03,
   ROS2_MSG_TELEMETRY_IMU_STATE = 0x04,
+  ROS2_MSG_TELEMETRY_DRIVE_STATE = 0x05,
   ROS2_MSG_CMD_CONFIG = 0x10,
   ROS2_MSG_ACK = 0x7E,
   ROS2_MSG_NACK = 0x7F,
@@ -62,6 +64,9 @@ typedef enum {
   ROS2_TELEM_MASK_BATTERY = ROS2_TELEM_MASK_BATTERY_STATE, // Compatibility alias.
   ROS2_TELEM_MASK_IMU = ROS2_TELEM_MASK_IMU_STATE,         // Compatibility alias.
 } ros2_telemetry_mask_t;
+
+/** ROS2_MSG_TELEMETRY_DRIVE_STATE payload (20 bytes, little-endian). */
+#define ROS2_TELEMETRY_DRIVE_STATE_PAYLOAD_SIZE 20U
 
 /**
  * ROS2_MSG_TELEMETRY_IMU_STATE payload (62 bytes, little-endian):
@@ -110,6 +115,7 @@ void ros2_msgs_send_frame(ros2_msgs_ctx_t *msgs, uint8_t msg_type, uint8_t seq, 
                           size_t payload_len);
 void ros2_msgs_send_battery_state(ros2_msgs_ctx_t *msgs, uint8_t seq);
 void ros2_msgs_send_imu_state(ros2_msgs_ctx_t *msgs, uint8_t seq);
+void ros2_msgs_send_drive_state(ros2_msgs_ctx_t *msgs, uint8_t seq, const drive_state_t *state);
 
 // Compatibility entry points for existing callers.
 void ros2_msgs_send_telemetry(ros2_msgs_ctx_t *msgs, uint8_t seq);
