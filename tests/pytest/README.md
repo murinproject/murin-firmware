@@ -6,7 +6,7 @@ serial ports configured in `test_config.yaml`.
 
 ## Test files
 
-- `test_protocol.py` — ROS2 heartbeat, motor, servo, configuration, and invalid-command tests.
+- `test_protocol.py` — ROS2 heartbeat, motor, servo, configuration, battery/IMU telemetry, and invalid-command tests.
 - `test_console.py` — UART shell commands, diagnostics, and monitor start/stop tests.
 - `test_perf.py` — heartbeat ACK latency and throughput test.
 - `test_stress.py` — sustained heartbeat test with a live progress bar.

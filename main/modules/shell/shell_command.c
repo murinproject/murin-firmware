@@ -50,20 +50,22 @@ int get_command(int argc, char **argv)
 
 int monitor_command(int argc, char **argv)
 {
-  if (argc != 2 ||
-      (strcmp(argv[1], "ros2") != 0 && strcmp(argv[1], "rp3") != 0 && strcmp(argv[1], "diff_drive") != 0)) {
-    shell_write("Usage: monitor <ros2|rp3|diff_drive>\r\n");
+  if (argc != 2 || (strcmp(argv[1], "ros2") != 0 && strcmp(argv[1], "rp3") != 0 && strcmp(argv[1], "diff_drive") != 0 &&
+                    strcmp(argv[1], "navigation") != 0)) {
+    shell_write("Usage: monitor <ros2|rp3|diff_drive|navigation>\r\n");
     return 1;
   }
 
   const bool rp3 = strcmp(argv[1], "rp3") == 0;
   const bool diff_drive = strcmp(argv[1], "diff_drive") == 0;
-  monitor_ros2_enable(!rp3 && !diff_drive);
+  const bool navigation = strcmp(argv[1], "navigation") == 0;
+  monitor_ros2_enable(!rp3 && !diff_drive && !navigation);
   monitor_rp3_enable(rp3);
   monitor_diff_drive_enable(diff_drive);
+  monitor_navigation_enable(navigation);
   shell_write("\033[?25l");
   shell_printf("%s monitor enabled (press q or Ctrl-C to stop)\r\n",
-               rp3 ? "RP3" : (diff_drive ? "DIFF_DRIVE" : "ROS2"));
+               rp3 ? "RP3" : (diff_drive ? "DIFF_DRIVE" : (navigation ? "NAVIGATION" : "ROS2")));
   return 0;
 }
 
@@ -200,6 +202,7 @@ int help_command(int argc, char **argv)
   shell_write("  monitor ros2  Monitor incoming ROS2 commands\r\n");
   shell_write("  monitor rp3  Monitor RP3 channels\r\n");
   shell_write("  monitor diff_drive  Monitor motor PWM, brakes, and directions\r\n");
+  shell_write("  monitor navigation  Monitor BNO085 navigation data\r\n");
   shell_write("  q/Ctrl-C  Stop the active monitor\r\n");
   shell_write("  clear  Clear the terminal screen\r\n");
   return 0;

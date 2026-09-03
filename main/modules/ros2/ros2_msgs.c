@@ -10,9 +10,11 @@
 #include "esp_timer.h"
 #include "flash_storage.h"
 #include "freertos/FreeRTOS.h"
+#include "freertos/queue.h"
 #include "freertos/semphr.h"
 #include "freertos/task.h"
 #include "freertos/timers.h"
+#include "navigation.h"
 #include "sdkconfig.h"
 #endif
 
@@ -45,12 +47,15 @@ static SemaphoreHandle_t tx_mutex = NULL;
 static TaskHandle_t command_task = NULL;
 static TaskHandle_t telemetry_task = NULL;
 static ros2_msgs_monitor_fn_t ros2_monitor = NULL;
+static QueueHandle_t imu_state_tx_queue = NULL;
+static QueueHandle_t battery_state_tx_queue = NULL;
 #ifndef UNIT_TEST
 static TaskHandle_t runtime_task = NULL;
 #endif
 
 static size_t ros2_msgs_read(ros2_msgs_ctx_t *msgs, uint8_t *data, size_t len);
 static void ros2_msgs_handle_frame(void *ctx, uint8_t msg_type, uint8_t seq, const uint8_t *payload, size_t len);
+static void ros2_msgs_send_imu_state_sample(ros2_msgs_ctx_t *msgs, uint8_t seq, const navigation_imu_sample_t *sample);
 
 #ifndef UNIT_TEST
 static void ros2_msgs_load_settings(void)
@@ -81,8 +86,22 @@ static void ros2_runtime_task(void *pvParameters)
 
 static void telemetry_timer_cb(TimerHandle_t xTimer)
 {
-  if (telemetry_task != NULL)
+  if (telemetry_task != NULL) {
+    const uint8_t pending = 1;
+    if (battery_state_tx_queue != NULL)
+      xQueueOverwrite(battery_state_tx_queue, &pending);
     xTaskNotifyGive(telemetry_task);
+  }
+}
+
+static void ros2_imu_state_callback(const navigation_imu_sample_t *sample)
+{
+  if (sample == NULL || telemetry_task == NULL)
+    return;
+
+  if (imu_state_tx_queue != NULL)
+    xQueueOverwrite(imu_state_tx_queue, sample);
+  xTaskNotifyGive(telemetry_task);
 }
 
 void ros2_msgs_on_rx(void)
@@ -158,7 +177,17 @@ void ros2_telemetry_task(void *pvParameters)
   while (1) {
     ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 
-    ros2_msgs_send_telemetry(msgs, msgs->tx_seq++);
+    navigation_imu_sample_t sample;
+    while (xQueueReceive(imu_state_tx_queue, &sample, 0) == pdTRUE) {
+      if (telemetry_enabled && (telemetry_mask & ROS2_TELEM_MASK_IMU_STATE) != 0)
+        ros2_msgs_send_imu_state_sample(msgs, msgs->tx_seq++, &sample);
+    }
+
+    uint8_t battery_pending;
+    while (xQueueReceive(battery_state_tx_queue, &battery_pending, 0) == pdTRUE) {
+      if (telemetry_enabled && (telemetry_mask & ROS2_TELEM_MASK_BATTERY_STATE) != 0)
+        ros2_msgs_send_battery_state(msgs, msgs->tx_seq++);
+    }
     // ESP_LOGI(TAG, "Sending telemetry %u", msgs->tx_seq);
   }
 }
@@ -194,11 +223,11 @@ static void ros2_msgs_send_nack(ros2_msgs_ctx_t *msgs, uint8_t seq, uint8_t err)
   ros2_msgs_send_frame(msgs, FRAMED_LINK_MSG_NACK, seq, payload, sizeof(payload));
 }
 
-void ros2_msgs_send_telemetry(ros2_msgs_ctx_t *msgs, uint8_t seq)
+void ros2_msgs_send_battery_state(ros2_msgs_ctx_t *msgs, uint8_t seq)
 {
   uint8_t payload[256];
   size_t len = 0;
-  battery_data_t battery_data;
+  battery_data_t battery_data = {0};
   const esp_err_t battery_ret = battery_fetch_data(&battery_data);
 
   payload[len++] = (battery_ret == ESP_OK && battery_data.valid) ? 1 : 0;
@@ -215,8 +244,50 @@ void ros2_msgs_send_telemetry(ros2_msgs_ctx_t *msgs, uint8_t seq)
   memcpy(payload + len, &battery_data.energy, sizeof(battery_data.energy));
   len += sizeof(battery_data.energy);
 
-  ros2_msgs_send_frame(msgs, ROS2_MSG_TELEMETRY, seq, payload, len);
+  ros2_msgs_send_frame(msgs, ROS2_MSG_TELEMETRY_BATTERY_STATE, seq, payload, len);
 }
+
+static void ros2_msgs_send_imu_state_sample(ros2_msgs_ctx_t *msgs, uint8_t seq, const navigation_imu_sample_t *imu)
+{
+  if (imu == NULL)
+    return;
+
+  uint8_t payload[ROS2_TELEMETRY_IMU_STATE_PAYLOAD_SIZE];
+  size_t len = 0;
+
+  payload[len++] = imu->data_valid ? 1 : 0;
+  payload[len++] = imu->data_valid ? 0 : 1;
+
+  memcpy(payload + len, &imu->timestamp_us, sizeof(imu->timestamp_us));
+  len += sizeof(imu->timestamp_us);
+  memcpy(payload + len, imu->acceleration_mps2, sizeof(imu->acceleration_mps2));
+  len += sizeof(imu->acceleration_mps2);
+  memcpy(payload + len, imu->angular_velocity_rad_s, sizeof(imu->angular_velocity_rad_s));
+  len += sizeof(imu->angular_velocity_rad_s);
+  memcpy(payload + len, imu->magnetic_field_uT, sizeof(imu->magnetic_field_uT));
+  len += sizeof(imu->magnetic_field_uT);
+  memcpy(payload + len, imu->quaternion, sizeof(imu->quaternion));
+  len += sizeof(imu->quaternion);
+
+  if (len != sizeof(payload)) {
+    ESP_LOGE(TAG, "Unexpected IMU telemetry payload size: %u", (unsigned)len);
+    return;
+  }
+  ros2_msgs_send_frame(msgs, ROS2_MSG_TELEMETRY_IMU_STATE, seq, payload, len);
+}
+
+void ros2_msgs_send_imu_state(ros2_msgs_ctx_t *msgs, uint8_t seq)
+{
+  navigation_snapshot_t snapshot = {0};
+  const esp_err_t navigation_ret = navigation_get_snapshot(&snapshot);
+  if (navigation_ret != ESP_OK && !snapshot.imu_valid)
+    return;
+  ros2_msgs_send_imu_state_sample(msgs, seq, &snapshot.imu);
+}
+
+void ros2_msgs_send_telemetry(ros2_msgs_ctx_t *msgs, uint8_t seq) { ros2_msgs_send_battery_state(msgs, seq); }
+
+void ros2_msgs_send_imu_telemetry(ros2_msgs_ctx_t *msgs, uint8_t seq) { ros2_msgs_send_imu_state(msgs, seq); }
 
 #ifdef UNIT_TEST
 void ros2_msgs_test_set_write(ros2_msgs_write_fn_t write)
@@ -345,12 +416,17 @@ void ros2_msgs_init(void)
 
   tx_mutex = xSemaphoreCreateMutex();
   ESP_ERROR_CHECK(tx_mutex != NULL ? ESP_OK : ESP_ERR_NO_MEM);
+  imu_state_tx_queue = xQueueCreate(1, sizeof(navigation_imu_sample_t));
+  ESP_ERROR_CHECK(imu_state_tx_queue != NULL ? ESP_OK : ESP_ERR_NO_MEM);
+  battery_state_tx_queue = xQueueCreate(1, sizeof(uint8_t));
+  ESP_ERROR_CHECK(battery_state_tx_queue != NULL ? ESP_OK : ESP_ERR_NO_MEM);
 
   telemetry_timer = xTimerCreate("telemetry_tmr", pdMS_TO_TICKS(telemetry_period_ms), pdTRUE, /* auto reload */
                                  NULL, telemetry_timer_cb);
 
   xTaskCreate(ros2_command_task, "ros2_command", 4096, &ros2_ctx, 5, &command_task);
   xTaskCreate(ros2_telemetry_task, "ros2_telemetry", 4096, &ros2_ctx, 5, &telemetry_task);
+  navigation_set_telemetry_callback(ros2_imu_state_callback);
 #ifndef UNIT_TEST
   xTaskCreate(ros2_runtime_task, "ros2_runtime", 3072, NULL, 2, &runtime_task);
 #endif

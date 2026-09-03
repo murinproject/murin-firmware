@@ -13,14 +13,14 @@
 | M4-ENC-A     | 17  |        | 38  | DIR 2        |
 | M4-ENC-B     | 18  |        | 37  | PSRAM        |
 | SDA          | 8   |        | 36  | PSRAM        |
-| BNO085 INT   | 3   |        | 35  | PSRAM        |
-| BNO085 RST   | 46  |        | 0   | BOOT STRAP   |
+| BNO085 CS    | 3   |        | 35  | PSRAM        |
+| BOOT STRAP   | 46  |        | 0   | BOOT STRAP   |
 | SCL          | 9   |        | 45  |              |
-| BNO085 CS    | 10  |        | 48  | BUILTIN LED  |
-| CLK          | 11  |        | 47  | BRAKE 1      |
-| MOSI         | 12  |        | 21  | BRAKE 1      |
-| MISO         | 13  |        | 20  | USB D+       |
-|              | 14  |        | 19  | USB D-       |
+| BNO085 INR   | 10  |        | 48  | BUILTIN LED  |
+| BNO085 CLK   | 11  |        | 47  | BRAKE 1      |
+| BNO085 MOSI  | 12  |        | 21  | BRAKE 1      |
+| BNO085 MISO  | 13  |        | 20  | USB D+       |
+| BNO085 RST   | 14  |        | 19  | USB D-       |
 |              | 5V  |        | GND |              |
 |              | GND |        | GND |              |
 

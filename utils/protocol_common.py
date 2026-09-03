@@ -11,7 +11,9 @@ ESCAPE_XOR = 0x20
 MSG_HEARTBEAT = 0x00
 MSG_CMD_MOTOR = 0x01
 MSG_CMD_SERVO = 0x02
-MSG_TELEMETRY = 0x03
+MSG_TELEMETRY_BATTERY = 0x03
+MSG_TELEMETRY = MSG_TELEMETRY_BATTERY  # Backward-compatible name.
+MSG_TELEMETRY_IMU = 0x04
 MSG_CMD_CONFIG = 0x10
 MSG_DATA_IMU = 0x20
 MSG_DATA_ENC = 0x21
@@ -22,7 +24,8 @@ TYPE_NAMES = {
     MSG_HEARTBEAT: "HEARTBEAT",
     MSG_CMD_MOTOR: "CMD_MOTOR",
     MSG_CMD_SERVO: "CMD_SERVO",
-    MSG_TELEMETRY: "TELEMETRY",
+    MSG_TELEMETRY_BATTERY: "TELEMETRY_BATTERY",
+    MSG_TELEMETRY_IMU: "TELEMETRY_IMU",
     MSG_CMD_CONFIG: "CMD_CONFIG",
     MSG_DATA_IMU: "DATA_IMU",
     MSG_DATA_ENC: "DATA_ENC",
@@ -41,6 +44,14 @@ CFG_TELEM_ENABLE = 1
 CFG_TELEM_RATE_MS = 2
 CFG_TELEM_MASK = 3
 CFG_TELEM_TIMEOUT_MS = 4
+
+TELEM_MASK_BATTERY = 1 << 0
+TELEM_MASK_IMU = 1 << 1
+
+BATTERY_TELEMETRY_FORMAT = "<BBIffff"
+IMU_TELEMETRY_FORMAT = "<BBq13f"
+BATTERY_TELEMETRY_SIZE = struct.calcsize(BATTERY_TELEMETRY_FORMAT)
+IMU_TELEMETRY_SIZE = struct.calcsize(IMU_TELEMETRY_FORMAT)
 
 ERR_NAMES = {
     ERR_OK: "OK",
@@ -104,6 +115,45 @@ def encode_servo(channel: int, pulse_us: int) -> bytes:
 
 def encode_config(key: int, value: int) -> bytes:
     return struct.pack("<Bi", key, value)
+
+
+def decode_battery_telemetry(payload: bytes) -> dict:
+    if len(payload) != BATTERY_TELEMETRY_SIZE:
+        raise ValueError(
+            f"battery telemetry must be {BATTERY_TELEMETRY_SIZE} bytes, "
+            f"got {len(payload)}"
+        )
+
+    valid, status, timestamp, voltage, current, power, energy = struct.unpack(
+        BATTERY_TELEMETRY_FORMAT, payload
+    )
+    return {
+        "valid": bool(valid),
+        "status": status,
+        "timestamp": timestamp,
+        "voltage": voltage,
+        "current": current,
+        "power": power,
+        "energy": energy,
+    }
+
+
+def decode_imu_telemetry(payload: bytes) -> dict:
+    if len(payload) != IMU_TELEMETRY_SIZE:
+        raise ValueError(
+            f"IMU telemetry must be {IMU_TELEMETRY_SIZE} bytes, got {len(payload)}"
+        )
+
+    values = struct.unpack(IMU_TELEMETRY_FORMAT, payload)
+    return {
+        "valid": bool(values[0]),
+        "status": values[1],
+        "timestamp_us": values[2],
+        "acceleration_mps2": values[3:6],
+        "angular_velocity_rad_s": values[6:9],
+        "magnetic_field_uT": values[9:12],
+        "quaternion_wxyz": values[12:16],
+    }
 
 
 class FrameParser:

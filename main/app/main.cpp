@@ -4,6 +4,7 @@ extern "C" {
 #include "diag.h"
 #include "diff_drive.h"
 #include "flash_storage.h"
+#include "navigation.h"
 #include "ros2_msgs.h"
 #include "rp3_receiver.h"
 #include "shell_uart.h"
@@ -23,6 +24,8 @@ extern "C" void app_main(void)
   led_init();
 
   rp3_receiver_init();
+
+  navigation_init();
 
   ros2_msgs_init();
 

@@ -90,7 +90,7 @@ Run all configured formatters:
 
 The script formats:
 
-- C/C++ files under `main` with `clang-format`
+- C/C++ files under `main` and `tests` with `clang-format`
 - Python files under `tests`, `tools`, and `utils` with Ruff
 - CMake files with `cmake-format`
 

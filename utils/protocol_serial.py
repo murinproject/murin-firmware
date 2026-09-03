@@ -76,6 +76,29 @@ class SerialAgent:
     def wait_for_nack(self, expected_seq: int, timeout=1.0):
         return self.wait_for_response(MSG_NACK, expected_seq, timeout)
 
+    def wait_for_type(self, expected_type: int, timeout=1.0):
+        """Wait for an unsolicited frame type and return its sequence and payload."""
+        start = time.monotonic()
+        while time.monotonic() - start < timeout:
+            remaining = max(0.0, timeout - (time.monotonic() - start))
+            try:
+                msg_type, seq, payload = self.rx_queue.get(timeout=min(0.1, remaining))
+            except queue.Empty:
+                continue
+
+            name = TYPE_NAMES.get(msg_type, f"0x{msg_type:02X}")
+            if msg_type == expected_type:
+                LOGGER.debug("  [RX] %s seq=%d payload=%s", name, seq, payload.hex())
+                return seq, payload
+
+            LOGGER.debug(
+                "  [RX] Unexpected %s seq=%d payload=%s", name, seq, payload.hex()
+            )
+
+        name = TYPE_NAMES.get(expected_type, f"0x{expected_type:02X}")
+        LOGGER.debug("  [TIMEOUT] No %s frame", name)
+        return None
+
     def wait_for_response(self, expected_type: int, expected_seq: int, timeout=1.0):
         start = time.monotonic()
         while time.monotonic() - start < timeout:

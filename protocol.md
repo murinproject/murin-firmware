@@ -135,7 +135,8 @@ command type. This makes a request uniquely matchable while it is in flight.
 | `HEARTBEAT` | `0x00` | Host | Uses the shared host command sequence; response echoes it |
 | `CMD_MOTOR` | `0x01` | Host | Uses the shared host command sequence; response echoes it |
 | `CMD_SERVO` | `0x02` | Host | Uses the shared host command sequence; response echoes it |
-| `TELEMETRY` | `0x03` | Firmware | Uses the firmware telemetry sequence; no ACK is expected |
+| `TELEMETRY_BATTERY` | `0x03` | Firmware | Periodic battery telemetry; uses the firmware telemetry sequence; no ACK is expected |
+| `TELEMETRY_IMU` | `0x04` | Firmware | Event-driven IMU telemetry; uses the firmware telemetry sequence; no ACK is expected |
 | `CMD_CONFIG` | `0x10` | Host | Uses the shared host command sequence; response echoes it |
 | `ACK` | `0x7E` | Responder | Copies the request sequence in the header and payload `[Seq]` |
 | `NACK` | `0x7F` | Responder | Copies the request sequence in the header and payload `[Seq, ErrorCode]` |
@@ -151,7 +152,7 @@ sequence values.
 The host sends a framed command to the firmware. The link parser validates the
 frame before dispatching the unstuffed payload to the message handler. Valid
 commands receive an ACK; invalid commands receive a NACK with the request
-sequence and error code. Telemetry is sent asynchronously by the firmware.
+sequence and error code.
 
 ```mermaid
 sequenceDiagram
@@ -172,8 +173,46 @@ sequenceDiagram
             F-->>H: NACK(Seq, error code)
         end
     end
-    F-->>H: TELEMETRY(Type 0x03, Seq, payload) periodically
 ```
+
+## Telemetry delivery sequence
+
+Battery and IMU telemetry use separate delivery triggers but share the
+firmware telemetry sequence counter and transmit lock. The BNO085 asserts its
+data-ready interrupt when a new report is available. The navigation task reads
+the sample and notifies the telemetry task immediately. The telemetry task
+keeps only the newest pending IMU sample, so a slow transport does not create a
+backlog of stale orientations. Battery telemetry remains driven by its
+periodic FreeRTOS timer.
+
+```mermaid
+sequenceDiagram
+    participant S as BNO085 sensor
+    participant N as Navigation task
+    participant T as Telemetry task
+    participant H as Host
+
+    par IMU telemetry: every sensor data-ready event
+        loop Each new IMU sample
+            S-->>N: INT/data-ready
+            N->>N: Read and publish newest IMU sample
+            N-->>T: Notify IMU sample available
+            T->>T: Copy newest sample
+            T-->>H: TELEMETRY_IMU (0x04, Seq, 62-byte payload)
+        end
+    and Battery telemetry: every TELEM_RATE_MS period
+        loop Each battery period
+            T->>T: Timer notification
+            T-->>H: TELEMETRY_BATTERY (0x03, Seq, 22-byte payload)
+        end
+    end
+```
+
+IMU telemetry is asynchronous and has no ACK. Its effective rate is limited
+by the sensor report configuration and transport capacity, not by
+`TELEM_RATE_MS`. The current BNO085 reports are configured at 100 Hz. Battery
+telemetry uses `TELEM_RATE_MS`, which defaults to 20 ms and accepts 10..5000
+ms. When both notifications are ready, IMU telemetry is sent first.
 
 ## ROS2 Message Layer
 
@@ -184,7 +223,8 @@ ROS2 message types:
 | `HEARTBEAT` | `0x00` | Empty |
 | `CMD_MOTOR` | `0x01` | `float32 left_mps`, `float32 right_mps` |
 | `CMD_SERVO` | `0x02` | `uint8 channel`, `uint16 pulse_us` |
-| `TELEMETRY` | `0x03` | Battery telemetry payload |
+| `TELEMETRY_BATTERY` | `0x03` | Battery telemetry payload |
+| `TELEMETRY_IMU` | `0x04` | IMU telemetry payload |
 | `CMD_CONFIG` | `0x10` | `uint8 key`, `int32 value` |
 
 All multi-byte ROS2 payload fields are little-endian.
@@ -293,8 +333,8 @@ Config keys:
 | Key | Value | Valid values |
 | --- | ---: | --- |
 | `TELEM_ENABLE` | `1` | `0` disables telemetry, non-zero enables telemetry |
-| `TELEM_RATE_MS` | `2` | `10..5000` |
-| `TELEM_MASK` | `3` | Any `uint32` bitmask |
+| `TELEM_RATE_MS` | `2` | Battery telemetry period in milliseconds, `10..5000` |
+| `TELEM_MASK` | `3` | Any `uint32` bitmask; bit 0 enables battery, bit 1 enables IMU |
 | `TELEM_TIMEOUT_MS` | `4` | Reserved in the current firmware |
 
 Example: enable telemetry with `Seq = 7`:
@@ -312,9 +352,17 @@ Invalid responses:
 | Unknown config key | `NACK payload = [Seq, ERR_CFG]` |
 | `TELEM_RATE_MS` outside `10..5000` | `NACK payload = [Seq, ERR_RANGE]` |
 
-### TELEMETRY
+`TELEM_MASK` bits:
 
-Telemetry is sent by the device.
+| Bit | Name | Meaning |
+| ---: | --- | --- |
+| 0 | `TELEM_MASK_BATTERY` | Enable `TELEMETRY_BATTERY` |
+| 1 | `TELEM_MASK_IMU` | Enable `TELEMETRY_IMU` |
+
+### TELEMETRY_BATTERY
+
+Battery telemetry is sent by the device at the configured `TELEM_RATE_MS`
+period when the battery bit is enabled in `TELEM_MASK`.
 
 Payload layout:
 
@@ -329,6 +377,26 @@ Payload layout:
 | `energy` | `float32` | 4 bytes |
 
 Total unstuffed payload length: 22 bytes.
+
+### TELEMETRY_IMU
+
+IMU telemetry is sent by the device immediately after a new BNO085 sample is
+read from the data-ready interrupt path, when the IMU bit is enabled in
+`TELEM_MASK`.
+
+Payload layout (little-endian):
+
+| Field | Type | Size |
+| --- | --- | ---: |
+| `imu_valid` | `uint8` | 1 byte |
+| `imu_status` | `uint8` | 1 byte |
+| `timestamp_us` | `int64` | 8 bytes |
+| `acceleration_mps2[3]` | `float32[3]` | 12 bytes |
+| `angular_velocity_rad_s[3]` | `float32[3]` | 12 bytes |
+| `magnetic_field_uT[3]` | `float32[3]` | 12 bytes |
+| `quaternion_wxyz[4]` | `float32[4]` | 16 bytes |
+
+Total unstuffed payload length: 62 bytes.
 
 ## Python Encoding Reference
 

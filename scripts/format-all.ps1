@@ -1,7 +1,7 @@
 <#
 .SYNOPSIS
-Formats C/C++ source files in main, Python source files in the project, and
-CMake files.
+Formats C/C++ source files in main and tests, Python source files in the
+project, and CMake files.
 
 .DESCRIPTION
 Uses the repository's .clang-format configuration for C/C++ files, Ruff for
@@ -16,15 +16,24 @@ $ErrorActionPreference = 'Stop'
 
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
 $mainRoot = Join-Path $repositoryRoot 'main'
+$testsRoot = Join-Path $repositoryRoot 'tests'
 $clangFormat = Get-Command clang-format -ErrorAction SilentlyContinue
 
 if ($null -eq $clangFormat) {
     throw 'clang-format was not found on PATH.'
 }
 
-# Format C/C++ source and header files under main.
+# Format project and test C/C++ source and header files. Generated test build
+# trees are excluded because they contain vendored GoogleTest sources.
 $extensions = @('*.c', '*.h', '*.cc', '*.cpp', '*.cxx', '*.hh', '*.hpp', '*.hxx')
-$files = Get-ChildItem -Path $mainRoot -Recurse -File -Include $extensions
+$clangRoots = @($mainRoot, $testsRoot) | Where-Object { Test-Path $_ }
+$files = $clangRoots |
+    ForEach-Object {
+        Get-ChildItem -Path $_ -Recurse -File -Include $extensions -ErrorAction SilentlyContinue
+    } |
+    Where-Object {
+        $_.FullName -notmatch '[\\/](build|build_codex|\.venv|__pycache__|node_modules|managed_components|\.git|\.pytest_cache)[\\/]'
+    }
 
 foreach ($file in $files) {
     Write-Host "Formatting $($file.FullName)"
@@ -34,7 +43,7 @@ foreach ($file in $files) {
     }
 }
 
-Write-Host "Formatted $($files.Count) file(s) under $mainRoot."
+Write-Host "Formatted $($files.Count) C/C++ file(s) under main and tests."
 
 # Format Python files in the project utility and test directories.
 $pythonRoots = @('tests', 'tools', 'utils') |
@@ -48,10 +57,10 @@ if ($null -eq $ruff) {
 
 $pythonFiles = $pythonRoots |
     ForEach-Object {
-        Get-ChildItem -Path $_ -Recurse -File -Filter '*.py'
+        Get-ChildItem -Path $_ -Recurse -File -Filter '*.py' -ErrorAction SilentlyContinue
     } |
     Where-Object {
-        $_.FullName -notmatch '[\\/](build|\.venv|__pycache__)[\\/]'
+        $_.FullName -notmatch '[\\/](build|\.venv|__pycache__|\.pytest_cache)[\\/]'
     }
 
 if ($pythonFiles.Count -gt 0) {

@@ -11,6 +11,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 #include "freertos/task.h"
+#include "navigation.h"
 #include "ros2_msgs.h"
 #include "shell_uart.h"
 
@@ -22,11 +23,13 @@
 #define RP3_CHANNEL_VALUE_MAX 1811
 #define RP3_CHANNEL_BAR_WIDTH 4
 #define RP3_MONITOR_CHANNEL_COUNT 8
+#define NAVIGATION_MONITOR_UPDATE_PERIOD_US 100000
 
 typedef enum {
   MONITOR_EVENT_ROS2,
   MONITOR_EVENT_RP3,
   MONITOR_EVENT_DIFF_DRIVE,
+  MONITOR_EVENT_NAVIGATION,
 } monitor_event_type_t;
 
 typedef struct {
@@ -36,6 +39,7 @@ typedef struct {
     ros2_diag_message_t ros2;
     rp3_signal_sample_t rp3;
     diff_drive_state_t diff_drive;
+    navigation_imu_sample_t navigation;
   } data;
 } monitor_event_t;
 
@@ -44,7 +48,9 @@ static QueueHandle_t s_monitor_queue;
 static volatile bool s_monitor_enabled;
 static volatile bool s_rp3_monitor_enabled;
 static volatile bool s_diff_drive_monitor_enabled;
+static volatile bool s_navigation_monitor_enabled;
 static volatile bool s_rp3_display_started;
+static bool s_navigation_display_started;
 static rp3_signal_sample_t s_rp3_displayed_sample;
 static bool s_rp3_display_valid;
 
@@ -110,6 +116,18 @@ static void diff_drive_monitor_callback(const diff_drive_state_t *state)
   (void)xQueueSend(s_monitor_queue, &event, 0);
 }
 
+static void navigation_monitor_callback(const navigation_imu_sample_t *sample)
+{
+  if (!s_navigation_monitor_enabled || s_monitor_queue == NULL || sample == NULL)
+    return;
+
+  monitor_event_t event = {
+      .type = MONITOR_EVENT_NAVIGATION,
+      .data.navigation = *sample,
+  };
+  (void)xQueueSend(s_monitor_queue, &event, 0);
+}
+
 static void append_bar(char *line, size_t line_size, size_t *length, uint16_t value)
 {
   const uint16_t clamped = value < RP3_CHANNEL_VALUE_MIN
@@ -131,8 +149,9 @@ static void ros2_monitor_task(void *arg)
 {
   (void)arg;
   monitor_event_t event;
-  char line[320];
+  char line[512];
   int64_t last_rp3_update_us = 0;
+  int64_t last_navigation_update_us = 0;
 
   while (1) {
     if (xQueueReceive(s_monitor_queue, &event, portMAX_DELAY) != pdTRUE)
@@ -204,6 +223,38 @@ static void ros2_monitor_task(void *arg)
       continue;
     }
 
+    if (event.type == MONITOR_EVENT_NAVIGATION) {
+      if (!s_navigation_monitor_enabled)
+        continue;
+
+      monitor_event_t pending;
+      while (xQueueReceive(s_monitor_queue, &pending, 0) == pdTRUE) {
+        if (pending.type == MONITOR_EVENT_NAVIGATION)
+          event = pending;
+      }
+
+      const int64_t now_us = esp_timer_get_time();
+      if (now_us - last_navigation_update_us < NAVIGATION_MONITOR_UPDATE_PERIOD_US)
+        continue;
+      last_navigation_update_us = now_us;
+
+      const navigation_imu_sample_t *sample = &event.data.navigation;
+      const bool first_display = !s_navigation_display_started;
+      const char *cursor_up = first_display ? "" : "\033[2A";
+      snprintf(
+          line, sizeof(line),
+          "%s\r\033[2K[NAV] V | ACC xyz              | GYRO xyz             | MAG xyz              | QUAT wxyz\r\n"
+          "\033[2K    %u | %+.3f %+.3f %+.3f | %+.3f %+.3f %+.3f | %+.3f %+.3f %+.3f | %+.3f %+.3f %+.3f %+.3f\r\n",
+          cursor_up, sample->data_valid ? 1U : 0U, sample->acceleration_mps2[0], sample->acceleration_mps2[1],
+          sample->acceleration_mps2[2], sample->angular_velocity_rad_s[0], sample->angular_velocity_rad_s[1],
+          sample->angular_velocity_rad_s[2], sample->magnetic_field_uT[0], sample->magnetic_field_uT[1],
+          sample->magnetic_field_uT[2], sample->quaternion[0], sample->quaternion[1], sample->quaternion[2],
+          sample->quaternion[3]);
+      s_navigation_display_started = true;
+      shell_write(line);
+      continue;
+    }
+
     if (!s_monitor_enabled)
       continue;
 
@@ -238,6 +289,7 @@ void monitor_init(void)
   ros2_msgs_set_monitor(ros2_monitor_callback);
   rp3_receiver_set_monitor(rp3_monitor_callback);
   motor_set_monitor_callback(diff_drive_monitor_callback);
+  navigation_set_monitor(navigation_monitor_callback);
   if (xTaskCreate(ros2_monitor_task, "monitor", ROS2_MONITOR_TASK_STACK_SIZE, NULL, ROS2_MONITOR_TASK_PRIORITY, NULL) !=
       pdPASS) {
     ESP_LOGE(TAG, "Unable to create ROS2 monitor task");
@@ -246,6 +298,7 @@ void monitor_init(void)
     ros2_msgs_set_monitor(NULL);
     rp3_receiver_set_monitor(NULL);
     motor_set_monitor_callback(NULL);
+    navigation_set_monitor(NULL);
   }
 }
 
@@ -279,3 +332,14 @@ void monitor_diff_drive_enable(bool enabled)
 }
 
 bool monitor_diff_drive_is_enable(void) { return s_diff_drive_monitor_enabled; }
+
+void monitor_navigation_enable(bool enabled)
+{
+  s_navigation_monitor_enabled = enabled;
+  if (!enabled)
+    s_navigation_display_started = false;
+  if (!enabled && s_monitor_queue != NULL)
+    xQueueReset(s_monitor_queue);
+}
+
+bool monitor_navigation_is_enable(void) { return s_navigation_monitor_enabled; }

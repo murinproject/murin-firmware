@@ -13,6 +13,8 @@ void monitor_rp3_enable(bool enabled);
 bool monitor_rp3_is_enable(void);
 void monitor_diff_drive_enable(bool enabled);
 bool monitor_diff_drive_is_enable(void);
+void monitor_navigation_enable(bool enabled);
+bool monitor_navigation_is_enable(void);
 
 #ifdef __cplusplus
 }

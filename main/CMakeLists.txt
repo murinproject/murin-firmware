@@ -6,6 +6,8 @@ set(COMPONENT_SRCS
     "modules/led/board_led.c"
     "modules/link/framed_link.c"
     "modules/monitor/monitor.c"
+    "modules/navigation/bno085.c"
+    "modules/navigation/navigation.c"
     "modules/motor/diff_drive.c"
     "modules/nvs/flash_storage.c"
     "modules/ros2/ros2_msgs.c"
@@ -22,6 +24,7 @@ set(COMPONENT_INCLUDE_DIRS
     "modules/led"
     "modules/link"
     "modules/monitor"
+    "modules/navigation"
     "modules/motor"
     "modules/nvs"
     "modules/ros2"
@@ -31,10 +34,12 @@ set(COMPONENT_INCLUDE_DIRS
 
 set(COMPONENT_PRIV_REQUIRES
     console
+    esp_driver_gpio
     esp_driver_i2c
     esp_driver_ledc
     esp_driver_pcnt
     esp_driver_rmt
+    esp_driver_spi
     esp_driver_uart
     esp_timer
     nvs_flash

@@ -7,6 +7,7 @@ Usage:
 """
 
 import struct
+import math
 
 import pytest
 
@@ -22,6 +23,12 @@ from protocol_common import (
     MSG_CMD_MOTOR,
     MSG_CMD_SERVO,
     MSG_HEARTBEAT,
+    MSG_TELEMETRY_BATTERY,
+    MSG_TELEMETRY_IMU,
+    TELEM_MASK_BATTERY,
+    TELEM_MASK_IMU,
+    decode_battery_telemetry,
+    decode_imu_telemetry,
     encode_config,
     encode_motor,
     encode_servo,
@@ -106,6 +113,49 @@ def test_config_command(serial_agent):
     payload = encode_config(CFG_TELEM_ENABLE, 1)
     seq = serial_agent.send_frame(MSG_CMD_CONFIG, payload)
     assert serial_agent.wait_for_ack(seq)
+
+
+def test_ros2_battery_and_imu_telemetry(serial_agent):
+    seq = serial_agent.send_frame(MSG_CMD_CONFIG, encode_config(CFG_TELEM_RATE_MS, 20))
+    assert serial_agent.wait_for_ack(seq)
+
+    telemetry_mask = TELEM_MASK_BATTERY | TELEM_MASK_IMU
+    seq = serial_agent.send_frame(
+        MSG_CMD_CONFIG, encode_config(CFG_TELEM_MASK, telemetry_mask)
+    )
+    assert serial_agent.wait_for_ack(seq)
+
+    seq = serial_agent.send_frame(MSG_CMD_CONFIG, encode_config(CFG_TELEM_ENABLE, 1))
+    assert serial_agent.wait_for_ack(seq)
+
+    battery_frame = serial_agent.wait_for_type(MSG_TELEMETRY_BATTERY, timeout=2.0)
+    assert battery_frame is not None, "no battery telemetry frame received"
+    _, battery_payload = battery_frame
+    battery = decode_battery_telemetry(battery_payload)
+    assert battery["status"] == 0
+    assert battery["valid"]
+    assert all(
+        math.isfinite(battery[field])
+        for field in ("voltage", "current", "power", "energy")
+    )
+
+    imu_frame = serial_agent.wait_for_type(MSG_TELEMETRY_IMU, timeout=2.0)
+    assert imu_frame is not None, "no IMU telemetry frame received"
+    _, imu_payload = imu_frame
+    imu = decode_imu_telemetry(imu_payload)
+    assert imu["status"] == 0
+    assert imu["valid"]
+    assert imu["timestamp_us"] > 0
+
+    vectors = (
+        imu["acceleration_mps2"]
+        + imu["angular_velocity_rad_s"]
+        + imu["magnetic_field_uT"]
+        + imu["quaternion_wxyz"]
+    )
+    assert all(math.isfinite(value) for value in vectors)
+    quaternion_norm = math.sqrt(sum(value * value for value in imu["quaternion_wxyz"]))
+    assert quaternion_norm == pytest.approx(1.0, abs=0.1)
 
 
 def test_invalid_command(serial_agent):

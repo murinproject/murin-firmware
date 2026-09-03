@@ -2,6 +2,7 @@
 "use strict";
 
 const fs = require("fs");
+const http = require("http");
 const path = require("path");
 
 const CONFIG_PATH = path.join(__dirname, "config.yaml");
@@ -13,8 +14,12 @@ const ESCAPE_XOR = 0x20;
 const MSG_HEARTBEAT = 0x00;
 const MSG_CMD_MOTOR = 0x01;
 const MSG_CMD_SERVO = 0x02;
-const MSG_TELEMETRY = 0x03;
+const MSG_TELEMETRY_BATTERY = 0x03;
+const MSG_TELEMETRY = MSG_TELEMETRY_BATTERY;
+const MSG_TELEMETRY_IMU = 0x04;
 const MSG_CMD_CONFIG = 0x10;
+const MSG_DATA_IMU = 0x20;
+const MSG_DATA_ENC = 0x21;
 const MSG_ACK = 0x7e;
 const MSG_NACK = 0x7f;
 
@@ -27,8 +32,11 @@ const TYPE_NAMES = new Map([
   [MSG_HEARTBEAT, "HEARTBEAT"],
   [MSG_CMD_MOTOR, "CMD_MOTOR"],
   [MSG_CMD_SERVO, "CMD_SERVO"],
-  [MSG_TELEMETRY, "TELEMETRY"],
+  [MSG_TELEMETRY_BATTERY, "TELEMETRY_BATTERY"],
+  [MSG_TELEMETRY_IMU, "TELEMETRY_IMU"],
   [MSG_CMD_CONFIG, "CMD_CONFIG"],
+  [MSG_DATA_IMU, "DATA_IMU"],
+  [MSG_DATA_ENC, "DATA_ENC"],
   [MSG_ACK, "ACK"],
   [MSG_NACK, "NACK"],
 ]);
@@ -81,7 +89,7 @@ function usage() {
   console.log(`usage: parser.js [--port PORT] [--baudrate BAUDRATE] [--raw]
                  [--heartbeat] [--motor LEFT RIGHT] [--servo CHANNEL PULSE_US]
                  [--config KEY VALUE] [--frame TYPE HEX_PAYLOAD]
-                 [--json TYPE JSON_TEXT] [--help]
+                 [--json TYPE JSON_TEXT] [--web] [--web-port PORT] [--help]
 
 Read and send ESP32 framed-link serial messages.
 
@@ -95,6 +103,8 @@ options:
   --config KEY VALUE          Send one CMD_CONFIG frame after opening the port
   --frame TYPE HEX_PAYLOAD    Send generic framed-link message with hex payload
   --json TYPE JSON_TEXT       Send generic framed-link message with UTF-8 JSON payload
+  --web                       Serve a Three.js IMU cube visualization
+  --web-port PORT             Visualization HTTP port (default: 8080)
   --help                      Show this help message
 `);
 }
@@ -134,6 +144,8 @@ function parseArgs(argv) {
     port: config.port,
     baudrate: config.baudrate || 2000000,
     raw: false,
+    web: false,
+    webPort: config.web_port || 8080,
     sends: [],
   };
 
@@ -152,6 +164,15 @@ function parseArgs(argv) {
         break;
       case "--raw":
         args.raw = true;
+        break;
+      case "--web":
+        args.web = true;
+        break;
+      case "--web-port":
+        args.webPort = parseInteger(argv[++i], "web-port");
+        if (args.webPort < 1 || args.webPort > 65535) {
+          throw new Error("web-port must fit in TCP port range 1..65535");
+        }
         break;
       case "--heartbeat":
         args.sends.push({ type: MSG_HEARTBEAT, payload: Buffer.alloc(0) });
@@ -269,8 +290,9 @@ function encodeConfig(key, value) {
 }
 
 class FrameParser {
-  constructor() {
+  constructor(quiet = false) {
     this.buffer = Buffer.alloc(0);
+    this.quiet = quiet;
   }
 
   feed(data) {
@@ -300,7 +322,9 @@ class FrameParser {
       this.buffer = this.buffer.subarray(total);
 
       if (computed !== rawCrc) {
-        console.log(`  [CRC FAIL] expected 0x${hex16(computed)} got 0x${hex16(rawCrc)}`);
+        if (!this.quiet) {
+          console.log(`  [CRC FAIL] expected 0x${hex16(computed)} got 0x${hex16(rawCrc)}`);
+        }
         continue;
       }
 
@@ -342,35 +366,86 @@ function maybeDecodeText(payload) {
   return null;
 }
 
-function decodeTelemetry(payload) {
-  if (payload.length !== 26) {
+function decodeBatteryTelemetry(payload) {
+  if (payload.length !== 22) {
     return `bad_len=${payload.length} raw=${hexBytes(payload)}`;
   }
 
   const valid = payload.readUInt8(0);
-  const err = payload.readUInt8(1);
+  const statusCode = payload.readUInt8(1);
   const timestamp = payload.readUInt32LE(2);
   const voltage = payload.readFloatLE(6);
   const current = payload.readFloatLE(10);
   const power = payload.readFloatLE(14);
   const energy = payload.readFloatLE(18);
-  const voltageRaw = payload.readUInt16LE(22);
-  const currentRaw = payload.readUInt16LE(24);
   const status = valid ? "valid" : "invalid";
 
   return (
-    `${status} err=${err} timestamp=${timestamp}ms ` +
+    `${status} status=${statusCode} timestamp=${timestamp}ms ` +
     `voltage=${voltage.toFixed(3)}V current=${current.toFixed(3)}A ` +
-    `power=${power.toFixed(3)}W energy=${energy.toFixed(3)}Wh ` +
-    `raw_v=${voltageRaw} raw_i=${currentRaw}`
+    `power=${power.toFixed(3)}W energy=${energy.toFixed(3)}Wh`
+  );
+}
+
+function parseImuTelemetry(payload) {
+  if (payload.length !== 62) {
+    return null;
+  }
+
+  return {
+    valid: payload.readUInt8(0) !== 0,
+    status: payload.readUInt8(1),
+    timestampUs: payload.readBigInt64LE(2).toString(),
+    acceleration: [
+    payload.readFloatLE(10),
+    payload.readFloatLE(14),
+    payload.readFloatLE(18),
+    ],
+    angularVelocity: [
+    payload.readFloatLE(22),
+    payload.readFloatLE(26),
+    payload.readFloatLE(30),
+    ],
+    magneticField: [
+    payload.readFloatLE(34),
+    payload.readFloatLE(38),
+    payload.readFloatLE(42),
+    ],
+    quaternion: [
+    payload.readFloatLE(46),
+    payload.readFloatLE(50),
+    payload.readFloatLE(54),
+    payload.readFloatLE(58),
+    ],
+  };
+}
+
+function decodeImuTelemetry(payload) {
+  const imu = parseImuTelemetry(payload);
+  if (!imu) {
+    return `bad_len=${payload.length} raw=${hexBytes(payload)}`;
+  }
+
+  const formatVector = (values) => values.map((value) => value.toFixed(3)).join(",");
+  const status = imu.valid ? "valid" : "invalid";
+
+  return (
+    `${status} status=${imu.status} timestamp=${imu.timestampUs}us ` +
+    `accel=[${formatVector(imu.acceleration)}]m/s2 ` +
+    `gyro=[${formatVector(imu.angularVelocity)}]rad/s ` +
+    `mag=[${formatVector(imu.magneticField)}]uT ` +
+    `quat=[${formatVector(imu.quaternion)}]`
   );
 }
 
 function decodeFrame({ msgType, seq, payload }) {
   const name = TYPE_NAMES.get(msgType) || `0x${msgType.toString(16).toUpperCase().padStart(2, "0")}`;
 
-  if (msgType === MSG_TELEMETRY) {
-    return `[RX] ${name} seq=${seq} ${decodeTelemetry(payload)}`;
+  if (msgType === MSG_TELEMETRY_BATTERY) {
+    return `[RX] ${name} seq=${seq} ${decodeBatteryTelemetry(payload)}`;
+  }
+  if (msgType === MSG_TELEMETRY_IMU) {
+    return `[RX] ${name} seq=${seq} ${decodeImuTelemetry(payload)}`;
   }
   if (msgType === MSG_ACK) {
     const ackSeq = payload.length >= 1 ? payload.readUInt8(0) : "missing";
@@ -405,16 +480,185 @@ function decodeFrame({ msgType, seq, payload }) {
   return `[RX] ${name} seq=${seq} len=${payload.length} raw=${hexBytes(payload)}`;
 }
 
+function visualizerHtml() {
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>IMU Cube</title>
+  <style>
+    :root { color-scheme: dark; font-family: system-ui, sans-serif; }
+    body { margin: 0; overflow: hidden; background: #10131a; }
+    #status { position: fixed; z-index: 1; top: 16px; left: 16px; padding: 10px 14px;
+      border-radius: 8px; background: #202632dd; font: 13px ui-monospace, monospace; }
+    #reset { position: fixed; z-index: 1; top: 62px; left: 16px; padding: 8px 12px;
+      border: 1px solid #53617a; border-radius: 6px; color: #eef3ff; background: #283246;
+      cursor: pointer; }
+    #reset:hover { background: #34415a; }
+    #hint { position: fixed; bottom: 14px; width: 100%; text-align: center; color: #8993a5; }
+  </style>
+</head>
+<body>
+  <div id="status">Waiting for IMU telemetry…</div>
+  <button id="reset" type="button">Reset orientation</button>
+  <div id="hint">Sensor Z is up • sensor Y is right • cube follows the IMU quaternion.</div>
+  <script type="module">
+    import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js";
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x10131a);
+    const camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.1, 100);
+    camera.position.set(2.8, 2.2, 4.2);
+    camera.lookAt(0, 0, 0);
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(devicePixelRatio);
+    renderer.setSize(innerWidth, innerHeight);
+    document.body.appendChild(renderer.domElement);
+
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x334466, 2.2));
+    const key = new THREE.DirectionalLight(0xffffff, 2.5);
+    key.position.set(3, 4, 5);
+    scene.add(key);
+    const cube = new THREE.Mesh(
+      new THREE.BoxGeometry(1.8, 1.8, 1.8),
+      new THREE.MeshStandardMaterial({ color: 0x2f8cff, roughness: 0.35, metalness: 0.1 })
+    );
+    scene.add(cube);
+    scene.add(new THREE.AxesHelper(2.2));
+
+    // Display coordinates: right = sensor Y, up = sensor Z, depth = sensor X.
+    const sensorToDisplay = new THREE.Matrix3().set(
+      0, 1, 0,
+      0, 0, 1,
+      1, 0, 0
+    );
+    const displayBasis = new THREE.Quaternion().setFromRotationMatrix(
+      new THREE.Matrix4().setFromMatrix3(sensorToDisplay)
+    );
+    const displayBasisInverse = displayBasis.clone().invert();
+    let referenceOrientation = null;
+    let latestOrientation = null;
+
+    function applyOrientation(sensorOrientation) {
+      const relative = referenceOrientation
+        ? referenceOrientation.clone().invert().multiply(sensorOrientation)
+        : sensorOrientation.clone();
+      // Change basis with q_display = B * q_sensor * B^-1.
+      cube.quaternion.copy(
+        displayBasis.clone().multiply(relative).multiply(displayBasisInverse)
+      ).normalize();
+    }
+
+    document.getElementById("reset").addEventListener("click", () => {
+      if (latestOrientation) {
+        referenceOrientation = latestOrientation.clone();
+        cube.quaternion.identity();
+        status.textContent = "Orientation reset — waiting for IMU motion…";
+      }
+    });
+
+    addEventListener("resize", () => {
+      camera.aspect = innerWidth / innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(innerWidth, innerHeight);
+    });
+
+    const status = document.getElementById("status");
+    const events = new EventSource("/events");
+    events.onopen = () => { status.textContent = "Connected — waiting for IMU telemetry…"; };
+    events.onerror = () => { status.textContent = "Disconnected — retrying…"; };
+    events.onmessage = (event) => {
+      const imu = JSON.parse(event.data);
+      if (!imu.valid) {
+        status.textContent = "IMU invalid (status=" + imu.status + ")";
+        return;
+      }
+      // Firmware sends quaternion_wxyz; Three.js expects x, y, z, w.
+      const q = imu.quaternion;
+      latestOrientation = new THREE.Quaternion(q[1], q[2], q[3], q[0]).normalize();
+      applyOrientation(latestOrientation);
+      status.textContent = "IMU live • " + imu.timestampUs + " µs • accel " +
+        imu.acceleration.map(v => v.toFixed(2)).join(", ") + " m/s²";
+    };
+
+    function animate() {
+      requestAnimationFrame(animate);
+      renderer.render(scene, camera);
+    }
+    animate();
+  </script>
+</body>
+</html>`;
+}
+
+class ImuVisualizer {
+  constructor(port, quiet = false) {
+    this.port = port;
+    this.quiet = quiet;
+    this.clients = new Set();
+    this.latest = null;
+    this.server = http.createServer((request, response) => {
+      if (request.url === "/") {
+        response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+        response.end(visualizerHtml());
+        return;
+      }
+      if (request.url === "/events") {
+        response.writeHead(200, {
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache",
+          Connection: "keep-alive",
+        });
+        response.write(": connected\n\n");
+        this.clients.add(response);
+        if (this.latest) response.write(`data: ${JSON.stringify(this.latest)}\n\n`);
+        request.on("close", () => this.clients.delete(response));
+        return;
+      }
+      response.writeHead(404);
+      response.end("Not found");
+    });
+  }
+
+  open() {
+    return new Promise((resolve, reject) => {
+      this.server.once("error", reject);
+      this.server.listen(this.port, "127.0.0.1", () => {
+        this.server.removeListener("error", reject);
+        if (!this.quiet) {
+          console.log(`[WEB] IMU cube available at http://127.0.0.1:${this.port}/`);
+        }
+        resolve();
+      });
+    });
+  }
+
+  publish(imu) {
+    this.latest = imu;
+    const message = `data: ${JSON.stringify(imu)}\n\n`;
+    for (const client of this.clients) client.write(message);
+  }
+
+  close() {
+    for (const client of this.clients) client.end();
+    this.clients.clear();
+    this.server.close();
+  }
+}
+
 class SerialMonitor {
-  constructor(port, baudrate, raw) {
+  constructor(port, baudrate, raw, visualizer = null, quiet = false) {
     this.port = port;
     this.baudrate = baudrate;
     this.raw = raw;
+    this.quiet = quiet;
     this.seq = 0;
-    this.parser = new FrameParser();
+    this.parser = new FrameParser(quiet);
     this.telemetryCount = 0;
     this.telemetryFirstTime = null;
     this.telemetryLastTime = null;
+    this.visualizer = visualizer;
     this.serial = null;
   }
 
@@ -429,7 +673,9 @@ class SerialMonitor {
     const frame = buildFrame(msgType, seq, payload);
     this.serial.write(frame);
     const name = TYPE_NAMES.get(msgType) || `0x${msgType.toString(16).toUpperCase().padStart(2, "0")}`;
-    console.log(`[TX] ${name} seq=${seq} payload=${hexBytes(payload)}`);
+    if (!this.quiet) {
+      console.log(`[TX] ${name} seq=${seq} payload=${hexBytes(payload)}`);
+    }
   }
 
   async open() {
@@ -451,20 +697,28 @@ class SerialMonitor {
     });
 
     this.serial.set({ dtr: true, rts: true }, () => {});
-    console.log(`[SERIAL] Connected to ${this.port} @ ${this.baudrate}`);
+    if (!this.quiet) {
+      console.log(`[SERIAL] Connected to ${this.port} @ ${this.baudrate}`);
+    }
 
     this.serial.on("data", (data) => {
-      if (this.raw) {
+      if (this.raw && !this.quiet) {
         console.log(`[RAW] ${hexBytes(data, 128)}`);
       }
       for (const frame of this.parser.feed(data)) {
-        if (frame.msgType === MSG_TELEMETRY) {
+        if (frame.msgType === MSG_TELEMETRY_BATTERY || frame.msgType === MSG_TELEMETRY_IMU) {
           const now = process.hrtime.bigint();
           if (this.telemetryFirstTime === null) this.telemetryFirstTime = now;
           this.telemetryLastTime = now;
           this.telemetryCount += 1;
         }
-        console.log(decodeFrame(frame));
+        if (frame.msgType === MSG_TELEMETRY_IMU && this.visualizer) {
+          const imu = parseImuTelemetry(frame.payload);
+          if (imu) this.visualizer.publish(imu);
+        }
+        if (!this.quiet) {
+          console.log(decodeFrame(frame));
+        }
       }
     });
   }
@@ -503,17 +757,24 @@ async function main() {
     return 2;
   }
 
-  const monitor = new SerialMonitor(args.port, args.baudrate, args.raw);
+  const quiet = args.web;
+  const visualizer = args.web ? new ImuVisualizer(args.webPort, quiet) : null;
+  if (visualizer) await visualizer.open();
+
+  const monitor = new SerialMonitor(args.port, args.baudrate, args.raw, visualizer, quiet);
   await monitor.open();
   for (const item of args.sends) {
     monitor.send(item.type, item.payload);
   }
 
-  console.log("[SERIAL] Listening. Press Ctrl+C to stop.");
+  if (!quiet) {
+    console.log("[SERIAL] Listening. Press Ctrl+C to stop.");
+  }
   process.on("SIGINT", () => {
-    console.log("\n[SERIAL] Stopped");
+    if (!quiet) console.log("\n[SERIAL] Stopped");
     monitor.close();
-    console.log(monitor.telemetryRateReport());
+    if (visualizer) visualizer.close();
+    if (!quiet) console.log(monitor.telemetryRateReport());
     process.exit(0);
   });
 }
