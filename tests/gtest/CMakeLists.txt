@@ -19,15 +19,19 @@ FetchContent_MakeAvailable(googletest)
 
 enable_testing()
 
+set(ROS2_MOCK_DIR ${CMAKE_CURRENT_SOURCE_DIR}/mocks/ros2)
+set(FLASH_STORAGE_MOCK_DIR ${CMAKE_CURRENT_SOURCE_DIR}/mocks/flash_storage)
+set(COMMON_MOCK_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/mocks/include)
+
 # Build the ros2_msgs C library (compiled as C)
 add_library(
   ros2_msgs STATIC
   ${CMAKE_CURRENT_SOURCE_DIR}/../../main/modules/ros2/ros2_msgs.c
   ${CMAKE_CURRENT_SOURCE_DIR}/../../main/modules/link/framed_link.c
-  ${CMAKE_CURRENT_SOURCE_DIR}/ros2_msgs_host_stubs.c)
+  ${ROS2_MOCK_DIR}/ros2_msgs_host_stubs.c)
 target_include_directories(
   ros2_msgs
-  PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
+  PRIVATE ${ROS2_MOCK_DIR}
           ${CMAKE_CURRENT_SOURCE_DIR}/../../main/modules/ros2
           ${CMAKE_CURRENT_SOURCE_DIR}/../../main/modules/link
           ${CMAKE_CURRENT_SOURCE_DIR}/../../main/modules/usb
@@ -50,3 +54,31 @@ target_compile_features(ros2_msgs_unittest PRIVATE cxx_std_11)
 target_link_libraries(ros2_msgs_unittest PRIVATE ros2_msgs gtest_main)
 
 add_test(NAME ros2_msgs_unittest COMMAND ros2_msgs_unittest)
+
+# Build flash_storage against a text-file-backed host NVS implementation.
+add_library(
+  flash_storage STATIC
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../main/modules/nvs/flash_storage.c
+  ${FLASH_STORAGE_MOCK_DIR}/flash_storage_host_stubs.c)
+target_include_directories(
+  flash_storage PRIVATE ${COMMON_MOCK_INCLUDE_DIR}
+                        ${CMAKE_CURRENT_SOURCE_DIR}/../../main/modules/nvs)
+set_target_properties(flash_storage PROPERTIES LINKER_LANGUAGE C)
+if(WIN32)
+  target_compile_definitions(flash_storage PRIVATE _CRT_SECURE_NO_WARNINGS)
+endif()
+
+add_executable(flash_storage_unittest
+               ${CMAKE_CURRENT_SOURCE_DIR}/test_flash_storage.cpp)
+target_include_directories(
+  flash_storage_unittest
+  PRIVATE ${COMMON_MOCK_INCLUDE_DIR}
+          ${CMAKE_CURRENT_SOURCE_DIR}/../../main/modules/nvs)
+target_compile_features(flash_storage_unittest PRIVATE cxx_std_11)
+target_link_libraries(flash_storage_unittest PRIVATE flash_storage gtest_main)
+if(WIN32)
+  target_compile_definitions(flash_storage_unittest
+                             PRIVATE _CRT_SECURE_NO_WARNINGS)
+endif()
+
+add_test(NAME flash_storage_unittest COMMAND flash_storage_unittest)

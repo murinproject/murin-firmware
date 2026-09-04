@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-Runs the pytest and GoogleTest suites.
+Runs pytest, GoogleTest, and LLVM coverage analysis.
 
 .DESCRIPTION
 Forwards all arguments to scripts/test-all.py.

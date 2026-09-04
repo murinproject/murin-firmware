@@ -117,10 +117,6 @@ void ros2_msgs_send_battery_state(ros2_msgs_ctx_t *msgs, uint8_t seq);
 void ros2_msgs_send_imu_state(ros2_msgs_ctx_t *msgs, uint8_t seq);
 void ros2_msgs_send_drive_state(ros2_msgs_ctx_t *msgs, uint8_t seq, const drive_state_t *state);
 
-// Compatibility entry points for existing callers.
-void ros2_msgs_send_telemetry(ros2_msgs_ctx_t *msgs, uint8_t seq);
-void ros2_msgs_send_imu_telemetry(ros2_msgs_ctx_t *msgs, uint8_t seq);
-
 #ifdef UNIT_TEST
 void ros2_msgs_test_set_write(ros2_msgs_write_fn_t write);
 void ros2_msgs_test_process_frame(uint8_t *data, size_t len);

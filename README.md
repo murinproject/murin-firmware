@@ -58,11 +58,14 @@ The parser tools, serial configuration, and command examples are documented in
 
 ### 4.1 Run all tests
 
-Run pytest and the GoogleTest suite from the repository root:
+Run pytest, GoogleTest, and LLVM coverage analysis from the repository root:
 
 ```powershell
 .\scripts\test-all.ps1
 ```
+
+The coverage summary is printed after the tests. The annotated HTML report is
+written to `tests/gtest/build-coverage/html/index.html`.
 
 Pass additional arguments to pytest:
 

@@ -327,10 +327,6 @@ void ros2_msgs_send_imu_state(ros2_msgs_ctx_t *msgs, uint8_t seq)
   ros2_msgs_send_imu_state_sample(msgs, seq, &snapshot.imu);
 }
 
-void ros2_msgs_send_telemetry(ros2_msgs_ctx_t *msgs, uint8_t seq) { ros2_msgs_send_battery_state(msgs, seq); }
-
-void ros2_msgs_send_imu_telemetry(ros2_msgs_ctx_t *msgs, uint8_t seq) { ros2_msgs_send_imu_state(msgs, seq); }
-
 #ifdef UNIT_TEST
 void ros2_msgs_test_set_write(ros2_msgs_write_fn_t write)
 {

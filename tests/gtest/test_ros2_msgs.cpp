@@ -121,9 +121,32 @@ TEST_F(Ros2MsgsTest, SendFramePreservesFieldsAndEscapesPayload)
   EXPECT_EQ(std::memcmp(decoded.payload, payload, sizeof(payload)), 0);
 }
 
-TEST_F(Ros2MsgsTest, ImuTelemetryUsesDedicatedMessageTypeAndPayload)
+TEST_F(Ros2MsgsTest, BatteryStateUsesDedicatedMessageTypeAndPayload)
 {
-  ros2_msgs_send_imu_telemetry(&messages_, 18);
+  ros2_msgs_send_battery_state(&messages_, 18);
+
+  const DecodedFrame decoded = Decode(response_);
+  ASSERT_EQ(decoded.count, 1u);
+  EXPECT_EQ(decoded.type, ROS2_MSG_TELEMETRY_BATTERY_STATE);
+  EXPECT_EQ(decoded.sequence, 18);
+  ASSERT_EQ(decoded.payload_length, 22u);
+  EXPECT_EQ(decoded.payload[0], 1u);
+  EXPECT_EQ(decoded.payload[1], 0u);
+
+  uint32_t timestamp = 0;
+  float values[4]{};
+  std::memcpy(&timestamp, decoded.payload + 2, sizeof(timestamp));
+  std::memcpy(values, decoded.payload + 6, sizeof(values));
+  EXPECT_EQ(timestamp, 123456789u);
+  EXPECT_FLOAT_EQ(values[0], 12.34f);
+  EXPECT_FLOAT_EQ(values[1], 1.23f);
+  EXPECT_FLOAT_EQ(values[2], 15.2f);
+  EXPECT_FLOAT_EQ(values[3], 123.4f);
+}
+
+TEST_F(Ros2MsgsTest, ImuStateUsesDedicatedMessageTypeAndPayload)
+{
+  ros2_msgs_send_imu_state(&messages_, 18);
 
   const DecodedFrame decoded = Decode(response_);
   ASSERT_EQ(decoded.count, 1u);
@@ -135,14 +158,27 @@ TEST_F(Ros2MsgsTest, ImuTelemetryUsesDedicatedMessageTypeAndPayload)
 
   int64_t timestamp = 0;
   float acceleration[3]{};
+  float angular_velocity[3]{};
+  float magnetic_field[3]{};
   float quaternion[4]{};
   std::memcpy(&timestamp, decoded.payload + 2, sizeof(timestamp));
   std::memcpy(acceleration, decoded.payload + 10, sizeof(acceleration));
+  std::memcpy(angular_velocity, decoded.payload + 22, sizeof(angular_velocity));
+  std::memcpy(magnetic_field, decoded.payload + 34, sizeof(magnetic_field));
   std::memcpy(quaternion, decoded.payload + 46, sizeof(quaternion));
   EXPECT_EQ(timestamp, 987654321);
   EXPECT_FLOAT_EQ(acceleration[0], 1.0f);
+  EXPECT_FLOAT_EQ(acceleration[1], 2.0f);
   EXPECT_FLOAT_EQ(acceleration[2], 3.0f);
+  EXPECT_FLOAT_EQ(angular_velocity[0], 4.0f);
+  EXPECT_FLOAT_EQ(angular_velocity[1], 5.0f);
+  EXPECT_FLOAT_EQ(angular_velocity[2], 6.0f);
+  EXPECT_FLOAT_EQ(magnetic_field[0], 7.0f);
+  EXPECT_FLOAT_EQ(magnetic_field[1], 8.0f);
+  EXPECT_FLOAT_EQ(magnetic_field[2], 9.0f);
   EXPECT_FLOAT_EQ(quaternion[0], 0.1f);
+  EXPECT_FLOAT_EQ(quaternion[1], 0.2f);
+  EXPECT_FLOAT_EQ(quaternion[2], 0.3f);
   EXPECT_FLOAT_EQ(quaternion[3], 0.4f);
 }
 
