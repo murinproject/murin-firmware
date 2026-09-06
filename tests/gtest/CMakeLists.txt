@@ -90,12 +90,39 @@ add_executable(diff_drive_unittest
 target_include_directories(
   diff_drive_unittest
   PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/mocks/diff_drive
+          ${COMMON_MOCK_INCLUDE_DIR}
           ${CMAKE_CURRENT_SOURCE_DIR}/../../main/config
           ${CMAKE_CURRENT_SOURCE_DIR}/../../main/modules/motor)
 target_compile_features(diff_drive_unittest PRIVATE cxx_std_11)
 target_link_libraries(diff_drive_unittest PRIVATE diff_drive gtest_main)
 
 add_test(NAME diff_drive_unittest COMMAND diff_drive_unittest)
+
+add_library(diag ${CMAKE_CURRENT_SOURCE_DIR}/../../main/modules/diag/diag.c
+                 ${CMAKE_CURRENT_SOURCE_DIR}/mocks/diag/diag_host_stubs.c)
+target_include_directories(
+  diag
+  PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/mocks/diag
+          ${CMAKE_CURRENT_SOURCE_DIR}/../../main/modules/diag
+          ${CMAKE_CURRENT_SOURCE_DIR}/../../main/modules/battery
+          ${CMAKE_CURRENT_SOURCE_DIR}/../../main/modules/link
+          ${CMAKE_CURRENT_SOURCE_DIR}/../../main/modules/rp3
+          ${COMMON_MOCK_INCLUDE_DIR})
+set_target_properties(diag PROPERTIES LINKER_LANGUAGE C)
+
+add_executable(diag_unittest ${CMAKE_CURRENT_SOURCE_DIR}/test_diag.cpp)
+target_include_directories(
+  diag_unittest
+  PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/mocks/diag
+          ${CMAKE_CURRENT_SOURCE_DIR}/../../main/modules/diag
+          ${CMAKE_CURRENT_SOURCE_DIR}/../../main/modules/battery
+          ${CMAKE_CURRENT_SOURCE_DIR}/../../main/modules/link
+          ${CMAKE_CURRENT_SOURCE_DIR}/../../main/modules/rp3
+          ${COMMON_MOCK_INCLUDE_DIR})
+target_compile_features(diag_unittest PRIVATE cxx_std_11)
+target_link_libraries(diag_unittest PRIVATE diag gtest_main)
+
+add_test(NAME diag_unittest COMMAND diag_unittest)
 
 # Build flash_storage against a text-file-backed host NVS implementation.
 add_library(
