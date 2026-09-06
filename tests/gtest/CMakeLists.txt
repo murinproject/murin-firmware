@@ -56,6 +56,22 @@ target_link_libraries(ros2_msgs_unittest PRIVATE ros2_msgs gtest_main)
 
 add_test(NAME ros2_msgs_unittest COMMAND ros2_msgs_unittest)
 
+add_library(framed_link STATIC
+            ${CMAKE_CURRENT_SOURCE_DIR}/../../main/modules/link/framed_link.c)
+target_include_directories(
+  framed_link PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../main/modules/link)
+set_target_properties(framed_link PROPERTIES LINKER_LANGUAGE C)
+
+add_executable(framed_link_unittest
+               ${CMAKE_CURRENT_SOURCE_DIR}/test_framed_link.cpp)
+target_include_directories(
+  framed_link_unittest
+  PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../main/modules/link)
+target_compile_features(framed_link_unittest PRIVATE cxx_std_11)
+target_link_libraries(framed_link_unittest PRIVATE framed_link gtest_main)
+
+add_test(NAME framed_link_unittest COMMAND framed_link_unittest)
+
 # Build flash_storage against a text-file-backed host NVS implementation.
 add_library(
   flash_storage STATIC
