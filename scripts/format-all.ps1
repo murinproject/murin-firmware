@@ -32,7 +32,7 @@ $files = $clangRoots |
         Get-ChildItem -Path $_ -Recurse -File -Include $extensions -ErrorAction SilentlyContinue
     } |
     Where-Object {
-        $_.FullName -notmatch '[\\/](build|build_codex|\.venv|__pycache__|node_modules|managed_components|\.git|\.pytest_cache)[\\/]'
+        $_.FullName -notmatch '[\\/](build[^\\/]*|\.venv|__pycache__|node_modules|managed_components|\.git|\.pytest_cache)[\\/]'
     }
 
 foreach ($file in $files) {
@@ -60,7 +60,7 @@ $pythonFiles = $pythonRoots |
         Get-ChildItem -Path $_ -Recurse -File -Filter '*.py' -ErrorAction SilentlyContinue
     } |
     Where-Object {
-        $_.FullName -notmatch '[\\/](build|\.venv|__pycache__|\.pytest_cache)[\\/]'
+        $_.FullName -notmatch '[\\/](build[^\\/]*|\.venv|__pycache__|\.pytest_cache)[\\/]'
     }
 
 if ($pythonFiles.Count -gt 0) {
@@ -81,7 +81,7 @@ if ($null -eq $cmakeFormat) {
 $cmakeFiles = Get-ChildItem -Path $repositoryRoot -Recurse -File `
     -Include 'CMakeLists.txt', '*.cmake' -ErrorAction SilentlyContinue |
     Where-Object {
-        $_.FullName -notmatch '[\\/](build|build_codex|\.venv|node_modules|managed_components|\.git|\.pytest_cache)[\\/]'
+        $_.FullName -notmatch '[\\/](build[^\\/]*|\.venv|node_modules|managed_components|\.git|\.pytest_cache)[\\/]'
     }
 
 if ($cmakeFiles.Count -gt 0) {
