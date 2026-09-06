@@ -40,10 +40,6 @@ typedef struct {
 } bldc_control_system_t;
 
 esp_err_t bldc_control_init(bldc_control_system_t *system);
-// esp_err_t bldc_control_set_pwm_duty(bldc_control_system_t *system, int
-// motor_index, uint32_t duty); esp_err_t
-// bldc_control_set_pwm_percent(bldc_control_system_t *system, int motor_index,
-// float duty_percent);
 esp_err_t bldc_control_set_drive(bldc_control_system_t *system, int16_t left, int16_t right);
 esp_err_t bldc_control_update(bldc_control_system_t *system);
 void bldc_control_get_snapshot(const bldc_control_system_t *system, bldc_encoder_snapshot_t *snapshot);

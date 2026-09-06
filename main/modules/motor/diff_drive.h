@@ -41,4 +41,8 @@ bool motor_set(float left_mps, float right_mps);
 void motor_get(float *left_mps, float *right_mps);
 void motor_set_monitor_callback(motor_monitor_fn_t monitor);
 
+#ifdef UNIT_TEST
+void motor_test_reset(void);
+#endif
+
 #endif

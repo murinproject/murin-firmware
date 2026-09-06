@@ -72,6 +72,31 @@ target_link_libraries(framed_link_unittest PRIVATE framed_link gtest_main)
 
 add_test(NAME framed_link_unittest COMMAND framed_link_unittest)
 
+add_library(
+  diff_drive STATIC
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../main/modules/motor/diff_drive.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/mocks/diff_drive/diff_drive_host_stubs.c)
+target_include_directories(
+  diff_drive
+  PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/mocks/diff_drive
+          ${COMMON_MOCK_INCLUDE_DIR}
+          ${CMAKE_CURRENT_SOURCE_DIR}/../../main/config
+          ${CMAKE_CURRENT_SOURCE_DIR}/../../main/modules/motor)
+target_compile_definitions(diff_drive PUBLIC UNIT_TEST)
+set_target_properties(diff_drive PROPERTIES LINKER_LANGUAGE C)
+
+add_executable(diff_drive_unittest
+               ${CMAKE_CURRENT_SOURCE_DIR}/test_diff_drive.cpp)
+target_include_directories(
+  diff_drive_unittest
+  PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/mocks/diff_drive
+          ${CMAKE_CURRENT_SOURCE_DIR}/../../main/config
+          ${CMAKE_CURRENT_SOURCE_DIR}/../../main/modules/motor)
+target_compile_features(diff_drive_unittest PRIVATE cxx_std_11)
+target_link_libraries(diff_drive_unittest PRIVATE diff_drive gtest_main)
+
+add_test(NAME diff_drive_unittest COMMAND diff_drive_unittest)
+
 # Build flash_storage against a text-file-backed host NVS implementation.
 add_library(
   flash_storage STATIC

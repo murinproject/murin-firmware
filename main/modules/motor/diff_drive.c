@@ -191,3 +191,18 @@ void motor_get(float *left, float *right)
 }
 
 void motor_set_monitor_callback(motor_monitor_fn_t monitor) { motor_monitor = monitor; }
+
+#ifdef UNIT_TEST
+void motor_test_reset(void)
+{
+  initialized = false;
+  command_timeout_timer = NULL;
+  applied_left_mps = 0;
+  applied_right_mps = 0;
+  target_left_mps = 0;
+  target_right_mps = 0;
+  last_command_time_ms = 0;
+  telemetry = (diff_drive_state_t){0};
+  motor_monitor = NULL;
+}
+#endif

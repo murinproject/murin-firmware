@@ -17,6 +17,7 @@ GTEST_COVERAGE_BUILD = GTEST_ROOT / "build-coverage"
 ROS2_MSGS_SOURCE = ROOT / "main" / "modules" / "ros2" / "ros2_msgs.c"
 FLASH_STORAGE_SOURCE = ROOT / "main" / "modules" / "nvs" / "flash_storage.c"
 FRAMED_LINK_SOURCE = ROOT / "main" / "modules" / "link" / "framed_link.c"
+DIFF_DRIVE_SOURCE = ROOT / "main" / "modules" / "motor" / "diff_drive.c"
 
 
 def run(command: list[str], env: dict[str, str] | None = None) -> tuple[int, str]:
@@ -161,16 +162,19 @@ def run_coverage() -> tuple[int, str]:
     ros2_executable = executable(GTEST_COVERAGE_BUILD, "ros2_msgs_unittest")
     flash_executable = executable(GTEST_COVERAGE_BUILD, "flash_storage_unittest")
     framed_link_executable = executable(GTEST_COVERAGE_BUILD, "framed_link_unittest")
+    diff_drive_executable = executable(GTEST_COVERAGE_BUILD, "diff_drive_unittest")
     common_coverage_args = [
         str(ros2_executable),
         f"-object={flash_executable}",
         f"-object={framed_link_executable}",
+        f"-object={diff_drive_executable}",
         f"-instr-profile={profile_data}",
     ]
     sources = [
         str(ROS2_MSGS_SOURCE),
         str(FLASH_STORAGE_SOURCE),
         str(FRAMED_LINK_SOURCE),
+        str(DIFF_DRIVE_SOURCE),
     ]
 
     print("\n=== LLVM Coverage ===")
