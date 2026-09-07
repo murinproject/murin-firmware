@@ -94,6 +94,9 @@ void ros2_host_fire_timer(void);
 void ros2_host_emit_imu(const navigation_imu_sample_t *sample);
 bool ros2_host_timer_enabled(void);
 TickType_t ros2_host_timer_period(void);
+bool ros2_host_set_time(uint64_t unix_seconds);
+uint64_t ros2_host_last_set_time(void);
+uint64_t ros2_host_get_uptime_ms(void);
 
 esp_err_t navigation_get_snapshot(navigation_snapshot_t *snapshot);
 
@@ -121,6 +124,7 @@ typedef struct {
   bool imu_valid;
   bool motor_result;
   bool timer_create_fails;
+  bool set_time_fails;
   const char *failed_task_name;
 } ros2_host_faults_t;
 

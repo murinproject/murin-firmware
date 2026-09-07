@@ -19,6 +19,7 @@ typedef enum {
 typedef enum {
   FLASH_STORAGE_ITEM_TELEMETRY_ENABLED,
   FLASH_STORAGE_ITEM_TOTAL_RUNTIME_MS,
+  FLASH_STORAGE_ITEM_UTC_OFFSET_MS,
   FLASH_STORAGE_ITEM_ROBOT_STATUS,
   FLASH_STORAGE_ITEM_BATTERY_MONITOR,
   FLASH_STORAGE_ITEM_SHELL_HISTORY,
@@ -42,6 +43,8 @@ bool flash_storage_get_telemetry_enabled(bool default_enabled);
 esp_err_t flash_storage_set_telemetry_enabled(bool enabled);
 uint64_t flash_storage_get_total_runtime_ms(void);
 esp_err_t flash_storage_set_total_runtime_ms(uint64_t runtime_ms);
+uint64_t flash_storage_get_utc_offset_ms(void);
+esp_err_t flash_storage_set_utc_offset_ms(uint64_t offset_ms);
 
 #ifdef __cplusplus
 }

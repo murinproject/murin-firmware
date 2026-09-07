@@ -249,6 +249,35 @@ TEST_F(Ros2MsgsTest, HeartbeatReceivesAcknowledgement)
   EXPECT_EQ(response.payload[0], 21);
 }
 
+TEST_F(Ros2MsgsTest, SetTimeUpdatesUtcAndReceivesAcknowledgement)
+{
+  const uint64_t unix_seconds = 1788796800ULL;
+  const auto response =
+      SendToRos(ROS2_MSG_SET_TIME, 56, reinterpret_cast<const uint8_t *>(&unix_seconds), sizeof(unix_seconds));
+
+  EXPECT_EQ(response.type, kAck);
+  EXPECT_EQ(response.sequence, 56);
+  EXPECT_EQ(ros2_host_last_set_time(), unix_seconds);
+  EXPECT_EQ(ros2_msgs_get_utc_offset_ms(), unix_seconds * 1000 - ros2_host_get_uptime_ms());
+}
+
+TEST_F(Ros2MsgsTest, SetTimeRejectsInvalidLengthAndUnsupportedValues)
+{
+  EXPECT_EQ(SendToRos(ROS2_MSG_SET_TIME, 57, nullptr, 0).payload[1], ROS2_MSG_ERR_LEN);
+
+  const uint64_t out_of_range = UINT64_MAX;
+  auto response =
+      SendToRos(ROS2_MSG_SET_TIME, 58, reinterpret_cast<const uint8_t *>(&out_of_range), sizeof(out_of_range));
+  EXPECT_EQ(response.type, kNack);
+  EXPECT_EQ(response.payload[1], ROS2_MSG_ERR_RANGE);
+
+  ros2_host_faults.set_time_fails = true;
+  const uint64_t valid = 1788796800ULL;
+  response = SendToRos(ROS2_MSG_SET_TIME, 59, reinterpret_cast<const uint8_t *>(&valid), sizeof(valid));
+  EXPECT_EQ(response.type, kNack);
+  EXPECT_EQ(response.payload[1], ROS2_MSG_ERR_RANGE);
+}
+
 TEST_F(Ros2MsgsTest, ValidMotorCommandReceivesAcknowledgement)
 {
   const uint8_t payload[] = {0x00, 0x00, 0x00, 0x3F, 0x00, 0x00, 0x00, 0xBF};

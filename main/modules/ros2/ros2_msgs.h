@@ -51,6 +51,7 @@ typedef enum {
   ROS2_MSG_TELEMETRY_IMU_STATE = 0x04,
   ROS2_MSG_TELEMETRY_DRIVE_STATE = 0x05,
   ROS2_MSG_CMD_CONFIG = 0x10,
+  ROS2_MSG_SET_TIME = 0x11,
   ROS2_MSG_ACK = 0x7E,
   ROS2_MSG_NACK = 0x7F,
 } message_type_t;
@@ -111,6 +112,7 @@ void ros2_msgs_set_monitor(ros2_msgs_monitor_fn_t monitor);
 void ros2_msgs_set_telemetry_enabled(bool enabled);
 bool ros2_msgs_get_telemetry_enabled(void);
 uint64_t ros2_msgs_get_total_runtime_ms(void);
+uint64_t ros2_msgs_get_utc_offset_ms(void);
 void ros2_msgs_send_frame(ros2_msgs_ctx_t *msgs, uint8_t msg_type, uint8_t seq, const uint8_t *payload,
                           size_t payload_len);
 void ros2_msgs_send_battery_state(ros2_msgs_ctx_t *msgs, uint8_t seq);

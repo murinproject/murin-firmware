@@ -1,439 +1,355 @@
-# Framed Link and ROS2 Message Protocol
+# Murin Robot Binary Protocol
 
-The serial protocol is split into two layers:
+This document specifies the binary protocol used to control the Murin robot and receive telemetry. It is intended to be sufficient for an independent client in Node.js, a browser, Python, ROS 2, or another environment. No ROS middleware is required: despite the firmware module name, this is a transport-independent binary protocol.
 
-* **Framed link layer**: common binary framing, byte-stuffing, CRC, ACK/NACK, and stream parsing. This layer is application-neutral and can carry ROS2-style binary messages, JSON, or any other payload.
-* **ROS2 message layer**: application message types and payload formats for heartbeat, motor, servo, config, and telemetry.
+## 1. Transport
 
-## Framed Link Layer
+The protocol is a continuous, ordered byte stream. A frame may be split across reads, and one read may contain multiple frames. Clients must keep a persistent receive buffer and parse complete frames from it.
 
-Frame layout:
+The firmware normally exposes the stream through USB CDC ACM (a virtual serial port). A build can instead select UART. The default UART settings are 115200 baud, 8 data bits, no parity, and 1 stop bit; use the firmware build settings as the authority if changed.
 
-| Field | Size | Description |
-| --- | ---: | --- |
-| `SOF` | 1 byte | Start of frame, always `0xAA` |
-| `Type` | 1 byte | Application message type |
-| `Seq` | 1 byte | Sequence number |
-| `Length` | 2 bytes | Byte-stuffed payload length, little-endian |
-| `Payload` | `Length` bytes | Byte-stuffed payload |
-| `CRC16` | 2 bytes | CRC-16/CCITT-FALSE over `Type + Seq + Length + stuffed Payload`, little-endian |
+A Node.js server can open the port with a package such as `serialport`. A browser can use Web Serial where supported. WebSocket is not a native firmware transport: a web application using WebSocket needs a gateway that forwards binary bytes between WebSocket and serial. The gateway must not convert frames to text or assume that one transport chunk is one frame.
 
-Constants:
+## 2. Numeric representation
 
-| Name | Value |
+- Multi-byte integers and IEEE-754 `float32` values are little-endian.
+- Integers are unsigned except `CMD_CONFIG.value` and the IMU timestamp.
+- Payload structures are packed with no alignment bytes.
+- Sequence arithmetic wraps modulo 256.
+
+## 3. Link-layer frame
+
+| Offset | Field | Size | Description |
+| ---: | --- | ---: | --- |
+| 0 | `SOF` | 1 | Always `0xAA` |
+| 1 | `Type` | 1 | Application message type |
+| 2 | `Seq` | 1 | Sender-owned sequence number |
+| 3 | `Length` | 2 | Length of the **stuffed** payload, little-endian |
+| 5 | `Payload` | `Length` | Stuffed payload bytes |
+| `5 + Length` | `CRC16` | 2 | CRC, little-endian |
+
+Total wire length is `7 + Length`. `Length` is not the decoded application-payload length.
+
+### 3.1 Limits
+
+| Item | Maximum |
 | --- | ---: |
-| `SOF` | `0xAA` |
-| `ESCAPE` | `0x1B` |
-| `ESCAPE_XOR` | `0x20` |
-| `ACK` | `0x7E` |
-| `NACK` | `0x7F` |
-| `ERR_CRC` | `0x01` |
-| `ERR_LEN` | `0x02` |
+| Decoded payload | 256 bytes |
+| Stuffed payload (`Length`) | 512 bytes |
+| Complete valid frame | 519 bytes |
 
-### Byte-Stuffing
+### 3.2 Payload byte-stuffing
 
-Only payload bytes are stuffed. Header and CRC bytes are not stuffed.
+Only payload bytes are escaped. The header and CRC are never escaped.
 
-Encoding rule:
+| Decoded byte | Bytes on the wire |
+| --- | --- |
+| `AA` | `1B 8A` |
+| `1B` | `1B 3B` |
+| Other | Unchanged |
 
-```text
-0xAA -> 0x1B 0x8A
-0x1B -> 0x1B 0x3B
-other bytes unchanged
-```
+To decode, replace every `1B X` pair with `X ^ 0x20`. A trailing `1B`, or a decoded payload exceeding 256 bytes, is invalid.
 
-Decoding rule:
+Because CRC bytes are not escaped, a CRC byte may equal `0xAA`. Use the declared length to find a candidate frame's end; do not restart at every `0xAA` inside an incomplete candidate.
 
-```text
-0x1B X -> X ^ 0x20
-```
+### 3.3 CRC
 
-### CRC
-
-CRC parameters:
+CRC-16/CCITT-FALSE parameters:
 
 | Parameter | Value |
 | --- | --- |
-| Algorithm | CRC-16/CCITT-FALSE |
 | Polynomial | `0x1021` |
 | Initial value | `0xFFFF` |
-| Reflected input/output | No |
+| Input/output reflection | No |
 | Final XOR | `0x0000` |
-| Encoded byte order | Little-endian |
+| Wire byte order | Little-endian |
 
-CRC input:
-
-```text
-Type + Seq + LengthLow + LengthHigh + StuffedPayload
-```
-
-`SOF` is not included.
-
-### Encode Flow
-
-1. Choose `Type` and `Seq`.
-2. Encode the application payload.
-3. Byte-stuff the payload.
-4. Write `Length` as the stuffed payload length.
-5. Compute CRC over `Type + Seq + Length + stuffed Payload`.
-6. Send:
+CRC input is the exact wire bytes:
 
 ```text
-SOF Type Seq LengthLow LengthHigh StuffedPayload CrcLow CrcHigh
+Type || Seq || LengthLow || LengthHigh || StuffedPayload
 ```
 
-Example heartbeat with `Seq = 0` and empty payload:
+`SOF` and the CRC bytes are excluded.
+
+### 3.4 Encoding examples
+
+Heartbeat, sequence 0, empty payload:
 
 ```text
 AA 00 00 00 00 C0 84
 ```
 
-### Decode Flow
+Motor command for `left_mps = 0.25`, `right_mps = -0.25`, sequence 0:
 
-1. Scan the byte stream until `SOF` (`0xAA`) is found.
-2. Read `Type`, `Seq`, and little-endian `Length`.
-3. Wait until `Length + 7` total frame bytes are available.
-4. Reject frames with a stuffed payload length greater than the link-layer maximum.
-5. Compute and compare CRC.
-6. Byte-unstuff the payload.
-7. Dispatch `(Type, Seq, Payload)` to the application handler.
-
-Link-layer errors:
-
-| Error | Response |
-| --- | --- |
-| CRC mismatch | `NACK` with payload `[Seq, ERR_CRC]` |
-| Invalid stuffed length | `NACK` with payload `[Seq, ERR_LEN]` |
-
-## ACK/NACK Frames
-
-ACK frame:
-
-| Field | Value |
-| --- | --- |
-| `Type` | `0x7E` |
-| Payload | `[Seq]` |
-
-NACK frame:
-
-| Field | Value |
-| --- | --- |
-| `Type` | `0x7F` |
-| Payload | `[Seq, ErrorCode]` |
-
-Application-layer errors use the same NACK frame type with application-specific error codes.
-
-## Sequence ownership
-
-`Seq` is an 8-bit identifier allocated independently by each sender and wraps
-from `0xFF` to `0x00`. Command messages sent by the host use one shared host
-sequence counter; the counter is not reset or maintained separately for each
-command type. This makes a request uniquely matchable while it is in flight.
-
-| Message type | Type | Sequence owner | Sequence behavior |
-| --- | ---: | --- | --- |
-| `HEARTBEAT` | `0x00` | Host | Uses the shared host command sequence; response echoes it |
-| `CMD_MOTOR` | `0x01` | Host | Uses the shared host command sequence; response echoes it |
-| `CMD_SERVO` | `0x02` | Host | Uses the shared host command sequence; response echoes it |
-| `TELEMETRY_BATTERY` | `0x03` | Firmware | Periodic battery telemetry; uses the firmware telemetry sequence; no ACK is expected |
-| `TELEMETRY_IMU` | `0x04` | Firmware | Event-driven IMU telemetry; uses the firmware telemetry sequence; no ACK is expected |
-| `CMD_CONFIG` | `0x10` | Host | Uses the shared host command sequence; response echoes it |
-| `ACK` | `0x7E` | Responder | Copies the request sequence in the header and payload `[Seq]` |
-| `NACK` | `0x7F` | Responder | Copies the request sequence in the header and payload `[Seq, ErrorCode]` |
-
-The message type and sequence together identify a protocol exchange. A host
-must match an ACK or NACK to the command it sent using the echoed sequence;
-the response type determines whether the command succeeded. Telemetry is an
-asynchronous firmware-to-host stream and is identified by its firmware-owned
-sequence values.
-
-## Request/response sequence
-
-The host sends a framed command to the firmware. The link parser validates the
-frame before dispatching the unstuffed payload to the message handler. Valid
-commands receive an ACK; invalid commands receive a NACK with the request
-sequence and error code.
-
-```mermaid
-sequenceDiagram
-    participant H as Host
-    participant L as Link parser
-    participant F as Firmware message handler
-
-    H->>L: Frame(SOF, Type, Seq, Length, stuffed Payload, CRC16)
-    L->>L: Find SOF, validate length and CRC
-    alt Invalid CRC or frame length
-        L-->>H: NACK(Seq, error code)
-    else Valid frame
-        L->>L: Unstuff payload
-        L->>F: Dispatch(Type, Seq, Payload)
-        alt Valid command
-            F-->>H: ACK(Seq)
-        else Invalid type or payload
-            F-->>H: NACK(Seq, error code)
-        end
-    end
+```text
+decoded payload = 00 00 80 3E 00 00 80 BE
+frame           = AA 01 00 08 00 00 00 80 3E 00 00 80 BE 2C 87
 ```
 
-## Telemetry delivery sequence
+### 3.5 Stream parsing
 
-Battery and IMU telemetry use separate delivery triggers but share the
-firmware telemetry sequence counter and transmit lock. The BNO085 asserts its
-data-ready interrupt when a new report is available. The navigation task reads
-the sample and notifies the telemetry task immediately. The telemetry task
-keeps only the newest pending IMU sample, so a slow transport does not create a
-backlog of stale orientations. Battery telemetry remains driven by its
-periodic FreeRTOS timer.
+1. Discard bytes before the first `0xAA`.
+2. Wait for the 5-byte prefix, then read `Length`.
+3. If `Length > 512`, resume scanning one byte after that `SOF`.
+4. Wait for all `7 + Length` bytes.
+5. Validate CRC before unescaping.
+6. Unescape and validate decoded length.
+7. Deliver `{ type, seq, payload }`, remove the complete frame, and continue.
 
-```mermaid
-sequenceDiagram
-    participant S as BNO085 sensor
-    participant N as Navigation task
-    participant T as Telemetry task
-    participant H as Host
+The firmware NACKs complete frames with bad CRC or escaping. Malformed streams where no trustworthy sequence can be recovered may be silently discarded; hosts need response timeouts.
 
-    par IMU telemetry: every sensor data-ready event
-        loop Each new IMU sample
-            S-->>N: INT/data-ready
-            N->>N: Read and publish newest IMU sample
-            N-->>T: Notify IMU sample available
-            T->>T: Copy newest sample
-            T-->>H: TELEMETRY_IMU (0x04, Seq, 62-byte payload)
-        end
-    and Battery telemetry: every TELEM_RATE_MS period
-        loop Each battery period
-            T->>T: Timer notification
-            T-->>H: TELEMETRY_BATTERY (0x03, Seq, 22-byte payload)
-        end
-    end
-```
+## 4. Sequences, ACKs, and NACKs
 
-IMU telemetry is asynchronous and has no ACK. Its effective rate is limited
-by the sensor report configuration and transport capacity, not by
-`TELEM_RATE_MS`. The current BNO085 reports are configured at 100 Hz. Battery
-telemetry uses `TELEM_RATE_MS`, which defaults to 20 ms and accepts 10..5000
-ms. When both notifications are ready, IMU telemetry is sent first.
+The host owns one shared 8-bit sequence counter for all commands. Increment it for each request and do not reuse a value while it is in flight. The firmware owns a separate sequence counter shared by all telemetry types. Telemetry is unsolicited and is not acknowledged. Gaps can indicate skipped or lost telemetry, although wraparound is normal.
 
-## ROS2 Message Layer
-
-ROS2 message types:
-
-| Type | Value | Payload |
+| Response | Type | Decoded payload |
 | --- | ---: | --- |
-| `HEARTBEAT` | `0x00` | Empty |
-| `CMD_MOTOR` | `0x01` | `float32 left_mps`, `float32 right_mps` |
-| `CMD_SERVO` | `0x02` | `uint8 channel`, `uint16 pulse_us` |
-| `TELEMETRY_BATTERY` | `0x03` | Battery telemetry payload |
-| `TELEMETRY_IMU` | `0x04` | IMU telemetry payload |
-| `CMD_CONFIG` | `0x10` | `uint8 key`, `int32 value` |
+| ACK | `0x7E` | request `Seq` (1 byte) |
+| NACK | `0x7F` | request `Seq`, error code (2 bytes) |
 
-All multi-byte ROS2 payload fields are little-endian.
+The response header `Seq` also equals the request sequence. Require header and payload sequences to agree, then match by sequence. Responses do not contain the original command type. Commands are not specified as idempotent, so automatic retries require care.
 
-ROS2 application error codes:
+### 4.1 Error codes
 
-| Error | Value | Meaning |
-| --- | ---: | --- |
-| `ERR_CRC` | `0x01` | CRC failure, generated by link layer |
-| `ERR_LEN` | `0x02` | Invalid frame or application payload length |
-| `ERR_TYPE` | `0x03` | Unknown ROS2 message type |
-| `ERR_CFG` | `0x04` | Unknown config key |
-| `ERR_RANGE` | `0x05` | Config value out of allowed range |
+| Value | Name | Meaning |
+| ---: | --- | --- |
+| `0x01` | `ERR_CRC` | Link CRC mismatch |
+| `0x02` | `ERR_LEN` | Link or application payload length invalid |
+| `0x03` | `ERR_FORMAT` / `ERR_TYPE` | Bad escaping, or unknown application type |
+| `0x04` | `ERR_CFG` | Unknown configuration key |
+| `0x05` | `ERR_RANGE` | Value rejected as out of range |
 
-### HEARTBEAT
+Value `0x03` has two names in the firmware layers. For a CRC-valid host frame it normally means unknown message type; the link parser uses it for malformed escaping.
 
-Request payload: empty.
+## 5. Message summary
 
-Valid response:
+| Direction | Type | Name | Payload bytes | Response |
+| --- | ---: | --- | ---: | --- |
+| Host → robot | `0x00` | `HEARTBEAT` | 0 | ACK |
+| Host → robot | `0x01` | `CMD_MOTOR` | 8 | ACK/NACK |
+| Host → robot | `0x02` | `CMD_SERVO` | 3 | ACK/NACK |
+| Robot → host | `0x03` | `TELEMETRY_BATTERY` | 22 | None |
+| Robot → host | `0x04` | `TELEMETRY_IMU` | 62 | None |
+| Robot → host | `0x05` | `TELEMETRY_DRIVE_STATE` | 20 | None |
+| Host → robot | `0x10` | `CMD_CONFIG` | 5 | ACK/NACK |
+| Host → robot | `0x11` | `SET_TIME` | 8 | ACK/NACK |
+| Response | `0x7E` | `ACK` | 1 | None |
+| Response | `0x7F` | `NACK` | 2 | None |
 
-```text
-ACK payload = [Seq]
-```
+Sending any non-command type to the firmware application handler produces `ERR_TYPE`.
 
-Example request with `Seq = 0`:
+## 6. Host commands
 
-```text
-AA 00 00 00 00 C0 84
-```
+### 6.1 `HEARTBEAT` (`0x00`)
 
-### CMD_MOTOR
+Payload is empty. Current firmware ACKs without checking its length, but clients must send an empty payload for forward compatibility.
 
-Payload:
+### 6.2 `CMD_MOTOR` (`0x01`)
 
-| Field | Type | Size |
-| --- | --- | ---: |
-| `left_mps` | `float32` | 4 bytes |
-| `right_mps` | `float32` | 4 bytes |
+| Offset | Field | Type | Unit |
+| ---: | --- | --- | --- |
+| 0 | `left_mps` | `float32` | m/s |
+| 4 | `right_mps` | `float32` | m/s |
 
-Valid payload length: 8 bytes.
+Both values must be finite and in `-0.5..+0.5 m/s` with the current build; otherwise the response is `ERR_RANGE`. This limit is the compile-time `DIFF_DRIVE_MAX_SPEED_MPS` setting, and `0.5 m/s` maps to 100% PWM. Clients should treat the advertised range as firmware-version/configuration dependent.
 
-The interface represents velocities up to `-10.0..+10.0 m/s`.
-The current firmware configuration maps the absolute velocity linearly to PWM
-duty: `0.0 m/s` is 0% duty and `0.5 m/s` is 100% duty. Values beyond the
-currently configured `0.5 m/s` limit are clamped until capability negotiation
-is implemented.
+### 6.3 `CMD_SERVO` (`0x02`)
 
-Example values:
+| Offset | Field | Type | Unit |
+| ---: | --- | --- | --- |
+| 0 | `channel` | `uint8` | channel number |
+| 1 | `pulse_us` | `uint16` | microseconds |
 
-```text
-left_mps  =  0.25 -> 00 00 80 3E
-right_mps = -0.25 -> 00 00 80 BE
-payload           -> 00 00 80 3E 00 00 80 BE
-```
+Current firmware validates only the 3-byte length and ACKs; it does not actuate servo hardware or validate values. ACK is not proof of physical movement.
 
-Example frame with `Seq = 0`:
+### 6.4 `CMD_CONFIG` (`0x10`)
 
-```text
-AA 01 00 04 00 00 02 00 FE FD 10
-```
+| Offset | Field | Type |
+| ---: | --- | --- |
+| 0 | `key` | `uint8` |
+| 1 | `value` | `int32` |
 
-Invalid payload length response:
+| Key | Name | Accepted value/effect |
+| ---: | --- | --- |
+| `0x01` | `TELEM_ENABLE` | `0` disables all telemetry; nonzero enables |
+| `0x02` | `TELEM_RATE_MS` | `10..5000`; battery and drive period in ms |
+| `0x03` | `TELEM_MASK` | 32-bit mask below |
+| `0x04` | `TELEM_TIMEOUT_MS` | Reserved; currently returns `ERR_CFG` |
 
-```text
-NACK payload = [Seq, ERR_LEN]
-```
+Although encoded signed, `TELEM_MASK` uses the same 32 bits as `uint32`. Thus `-1` enables all defined bits.
 
-### CMD_SERVO
+| Bit | Value | Stream |
+| ---: | ---: | --- |
+| 0 | `0x01` | Battery |
+| 1 | `0x02` | IMU |
+| 2 | `0x04` | Reserved robot state (not emitted) |
+| 3 | `0x08` | Drive state |
 
-Payload:
+Both global enable and the relevant mask bit must be set. Defaults are enabled, 20 ms periodic interval, and all mask bits set. Global enable is persisted; rate and mask currently are not.
 
-| Field | Type | Size |
-| --- | --- | ---: |
-| `channel` | `uint8` | 1 byte |
-| `pulse_us` | `uint16` | 2 bytes |
-
-Valid payload length: 3 bytes.
-
-Example values:
-
-```text
-channel  = 0    -> 00
-pulse_us = 1500 -> DC 05
-payload         -> 00 DC 05
-```
-
-Invalid payload length response:
-
-```text
-NACK payload = [Seq, ERR_LEN]
-```
-
-### CMD_CONFIG
-
-Payload:
-
-| Field | Type | Size |
-| --- | --- | ---: |
-| `key` | `uint8` | 1 byte |
-| `value` | `int32` | 4 bytes |
-
-Valid payload length: 5 bytes.
-
-Config keys:
-
-| Key | Value | Valid values |
-| --- | ---: | --- |
-| `TELEM_ENABLE` | `1` | `0` disables telemetry, non-zero enables telemetry |
-| `TELEM_RATE_MS` | `2` | Battery telemetry period in milliseconds, `10..5000` |
-| `TELEM_MASK` | `3` | Any `uint32` bitmask; bit 0 enables battery, bit 1 enables IMU |
-| `TELEM_TIMEOUT_MS` | `4` | Reserved in the current firmware |
-
-Example: enable telemetry with `Seq = 7`:
+Enable telemetry, sequence 7:
 
 ```text
 payload = 01 01 00 00 00
 frame   = AA 10 07 05 00 01 01 00 00 00 D6 29
 ```
 
-Invalid responses:
+### 6.5 `SET_TIME` (`0x11`)
 
-| Condition | Response |
-| --- | --- |
-| Payload length is not 5 | `NACK payload = [Seq, ERR_LEN]` |
-| Unknown config key | `NACK payload = [Seq, ERR_CFG]` |
-| `TELEM_RATE_MS` outside `10..5000` | `NACK payload = [Seq, ERR_RANGE]` |
+The payload is one little-endian `uint64` Unix timestamp in whole UTC seconds.
+The firmware sets its system clock with zero fractional microseconds, calculates
+`UTC milliseconds - ESP32 uptime milliseconds`, retains that offset in RAM and
+NVS flash, and returns ACK on success. Telemetry
+timestamps remain uptime/source-relative and do not change to UTC. An invalid payload length returns `ERR_LEN`; a value above
+`INT64_MAX / 1000` or a platform clock-setting failure returns `ERR_RANGE`.
 
-`TELEM_MASK` bits:
+## 7. Robot telemetry
 
-| Bit | Name | Meaning |
-| ---: | --- | --- |
-| 0 | `TELEM_MASK_BATTERY` | Enable `TELEMETRY_BATTERY` |
-| 1 | `TELEM_MASK_IMU` | Enable `TELEMETRY_IMU` |
-| 3 | `TELEM_MASK_DRIVE_STATE` | Enable `TELEMETRY_DRIVE_STATE` |
+Accept telemetry interleaved with command responses. Battery and drive state use `TELEM_RATE_MS`. IMU is event-driven (currently near 100 Hz). Queues retain only the newest pending sample, so values may be coalesced under load. If several kinds are ready, order is IMU, battery, drive. Do not ACK telemetry.
 
-### TELEMETRY_BATTERY
+### 7.1 `TELEMETRY_BATTERY` (`0x03`, 22 bytes)
 
-Battery telemetry is sent by the device at the configured `TELEM_RATE_MS`
-period when the battery bit is enabled in `TELEM_MASK`.
+| Offset | Field | Type | Description |
+| ---: | --- | --- | --- |
+| 0 | `valid` | `uint8` | 1 valid, 0 invalid |
+| 1 | `status` | `uint8` | low byte of sensor result code |
+| 2 | `timestamp` | `uint32` | sensor timestamp |
+| 6 | `voltage` | `float32` | volts |
+| 10 | `current` | `float32` | amperes |
+| 14 | `power` | `float32` | watts |
+| 18 | `energy` | `float32` | sensor-reported energy |
 
-Payload layout:
+### 7.2 `TELEMETRY_IMU` (`0x04`, 62 bytes)
 
-| Field | Type | Size |
-| --- | --- | ---: |
-| `battery_valid` | `uint8` | 1 byte |
-| `battery_ret` | `uint8` | 1 byte |
-| `timestamp` | `uint32` | 4 bytes |
-| `voltage` | `float32` | 4 bytes |
-| `current` | `float32` | 4 bytes |
-| `power` | `float32` | 4 bytes |
-| `energy` | `float32` | 4 bytes |
+| Offset | Field | Type | Unit/order |
+| ---: | --- | --- | --- |
+| 0 | `valid` | `uint8` | 1 valid, 0 invalid |
+| 1 | `status` | `uint8` | currently 0 valid, 1 invalid |
+| 2 | `timestamp_us` | `int64` | microseconds |
+| 10 | `acceleration_mps2` | `float32[3]` | x, y, z; m/s² |
+| 22 | `angular_velocity_rad_s` | `float32[3]` | x, y, z; rad/s |
+| 34 | `magnetic_field_uT` | `float32[3]` | x, y, z; µT |
+| 46 | `quaternion_wxyz` | `float32[4]` | w, x, y, z |
 
-Total unstuffed payload length: 22 bytes.
+Use `Buffer.readBigInt64LE()` for the timestamp when exact 64-bit values matter; JavaScript `Number` cannot represent every `int64` exactly.
 
-### TELEMETRY_IMU
+### 7.3 `TELEMETRY_DRIVE_STATE` (`0x05`, 20 bytes)
 
-IMU telemetry is sent by the device immediately after a new BNO085 sample is
-read from the data-ready interrupt path, when the IMU bit is enabled in
-`TELEM_MASK`.
+| Offset | Field | Type | Description |
+| ---: | --- | --- | --- |
+| 0 | `timestamp_ms` | `uint32` | low 32 bits of total runtime, ms |
+| 4 | `linear_velocity` | `float32` | `(left + right) / 2`, m/s |
+| 8 | `angular_velocity` | `float32` | `right - left`, not divided by wheel track |
+| 12 | `left_velocity` | `float32` | m/s |
+| 16 | `right_velocity` | `float32` | m/s |
 
-Payload layout (little-endian):
+A client requiring angular velocity in rad/s must divide the wheel-velocity difference by the robot wheel track.
 
-| Field | Type | Size |
-| --- | --- | ---: |
-| `imu_valid` | `uint8` | 1 byte |
-| `imu_status` | `uint8` | 1 byte |
-| `timestamp_us` | `int64` | 8 bytes |
-| `acceleration_mps2[3]` | `float32[3]` | 12 bytes |
-| `angular_velocity_rad_s[3]` | `float32[3]` | 12 bytes |
-| `magnetic_field_uT[3]` | `float32[3]` | 12 bytes |
-| `quaternion_wxyz[4]` | `float32[4]` | 16 bytes |
+## 8. Node.js reference codec
 
-Total unstuffed payload length: 62 bytes.
+This dependency-free codec uses Node.js `Buffer`. It works above serial or binary WebSocket messages and preserves partial frames.
 
-### TELEMETRY_DRIVE_STATE
+```js
+const SOF = 0xaa, ESC = 0x1b;
+const MAX_STUFFED = 512, MAX_PAYLOAD = 256;
 
-Drive-state telemetry is sent periodically at `TELEM_RATE_MS` when bit 3 is
-enabled in `TELEM_MASK`.
+function crc16(bytes) {
+  let crc = 0xffff;
+  for (const byte of bytes) {
+    crc ^= byte << 8;
+    for (let i = 0; i < 8; i++) {
+      crc = crc & 0x8000 ? (crc << 1) ^ 0x1021 : crc << 1;
+      crc &= 0xffff;
+    }
+  }
+  return crc;
+}
 
-Payload layout (little-endian):
+function stuff(payload) {
+  const out = [];
+  for (const b of payload)
+    b === SOF || b === ESC ? out.push(ESC, b ^ 0x20) : out.push(b);
+  return Buffer.from(out);
+}
 
-| Field | Type | Size |
-| --- | --- | ---: |
-| `timestamp_ms` | `uint32` | 4 bytes |
-| `linear_velocity` | `float32` | 4 bytes |
-| `angular_velocity` | `float32` | 4 bytes |
-| `left_velocity` | `float32` | 4 bytes |
-| `right_velocity` | `float32` | 4 bytes |
+function unstuff(input) {
+  const out = [];
+  for (let i = 0; i < input.length; i++) {
+    let b = input[i];
+    if (b === ESC) {
+      if (++i === input.length) throw new Error("trailing escape");
+      b = input[i] ^ 0x20;
+    }
+    if (out.push(b) > MAX_PAYLOAD) throw new Error("payload too long");
+  }
+  return Buffer.from(out);
+}
 
-Total unstuffed payload length: 20 bytes.
+function encodeFrame(type, seq, payload = Buffer.alloc(0)) {
+  payload = Buffer.from(payload);
+  if (payload.length > MAX_PAYLOAD) throw new RangeError("payload too long");
+  const wirePayload = stuff(payload);
+  const body = Buffer.alloc(4 + wirePayload.length);
+  body[0] = type & 0xff;
+  body[1] = seq & 0xff;
+  body.writeUInt16LE(wirePayload.length, 2);
+  wirePayload.copy(body, 4);
+  const frame = Buffer.alloc(1 + body.length + 2);
+  frame[0] = SOF;
+  body.copy(frame, 1);
+  frame.writeUInt16LE(crc16(body), 1 + body.length);
+  return frame;
+}
 
-## Python Encoding Reference
+class FrameParser {
+  buffer = Buffer.alloc(0);
+  push(chunk) {
+    this.buffer = Buffer.concat([this.buffer, Buffer.from(chunk)]);
+    const frames = [];
+    for (;;) {
+      const start = this.buffer.indexOf(SOF);
+      if (start < 0) { this.buffer = Buffer.alloc(0); break; }
+      if (start) this.buffer = this.buffer.subarray(start);
+      if (this.buffer.length < 5) break;
+      const length = this.buffer.readUInt16LE(3);
+      if (length > MAX_STUFFED) { this.buffer = this.buffer.subarray(1); continue; }
+      const total = 7 + length;
+      if (this.buffer.length < total) break;
+      const frame = this.buffer.subarray(0, total);
+      this.buffer = this.buffer.subarray(total);
+      if (frame.readUInt16LE(5 + length) !== crc16(frame.subarray(1, 5 + length))) continue;
+      try {
+        frames.push({ type: frame[1], seq: frame[2], payload: unstuff(frame.subarray(5, 5 + length)) });
+      } catch { /* discard malformed complete frame */ }
+    }
+    return frames;
+  }
+}
 
-The pytest utilities in `utils/protocol_common.py` implement the same frame format.
+function motorPayload(left, right) {
+  const b = Buffer.alloc(8); b.writeFloatLE(left, 0); b.writeFloatLE(right, 4); return b;
+}
+function servoPayload(channel, pulseUs) {
+  const b = Buffer.alloc(3); b.writeUInt8(channel, 0); b.writeUInt16LE(pulseUs, 1); return b;
+}
+function configPayload(key, value) {
+  const b = Buffer.alloc(5); b.writeUInt8(key, 0); b.writeInt32LE(value, 1); return b;
+}
 
-Motor payload:
-
-```python
-struct.pack("<ff", left_mps, right_mps)
+// port.write(encodeFrame(0x01, seq, motorPayload(0.25, -0.25)));
 ```
 
-Servo payload:
+In a browser use `Uint8Array`/`DataView`, passing `true` for little-endian multi-byte reads and writes. For WebSocket set `socket.binaryType = "arraybuffer"`.
 
-```python
-struct.pack("<BH", channel, pulse_us)
-```
+## 9. Compatibility and source of truth
 
-Config payload:
+Receivers should ignore unknown telemetry types after frame validation and require the documented payload size before decoding known types.
 
-```python
-struct.pack("<Bi", key, value)
-```
+Matching implementations are:
+
+- `main/modules/link/framed_link.c` — framing, escaping, limits, CRC;
+- `main/modules/ros2/ros2_msgs.c` — commands and telemetry;
+- `utils/protocol_common.py` — Python host reference.
+
+Protocol changes should update those implementations, their tests, and this document together.

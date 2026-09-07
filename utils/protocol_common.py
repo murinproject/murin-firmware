@@ -16,6 +16,7 @@ MSG_TELEMETRY = MSG_TELEMETRY_BATTERY  # Backward-compatible name.
 MSG_TELEMETRY_IMU = 0x04
 MSG_TELEMETRY_DRIVE_STATE = 0x05
 MSG_CMD_CONFIG = 0x10
+MSG_SET_TIME = 0x11
 MSG_DATA_IMU = 0x20
 MSG_DATA_ENC = 0x21
 MSG_ACK = 0x7E
@@ -29,6 +30,7 @@ TYPE_NAMES = {
     MSG_TELEMETRY_IMU: "TELEMETRY_IMU",
     MSG_TELEMETRY_DRIVE_STATE: "TELEMETRY_DRIVE_STATE",
     MSG_CMD_CONFIG: "CMD_CONFIG",
+    MSG_SET_TIME: "SET_TIME",
     MSG_DATA_IMU: "DATA_IMU",
     MSG_DATA_ENC: "DATA_ENC",
     MSG_ACK: "ACK",
@@ -120,6 +122,10 @@ def encode_servo(channel: int, pulse_us: int) -> bytes:
 
 def encode_config(key: int, value: int) -> bytes:
     return struct.pack("<Bi", key, value)
+
+
+def encode_set_time(unix_seconds: int) -> bytes:
+    return struct.pack("<Q", unix_seconds)
 
 
 def decode_battery_telemetry(payload: bytes) -> dict:

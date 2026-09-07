@@ -22,6 +22,13 @@ const flash_storage_item_t flash_storage_items[FLASH_STORAGE_ITEM_COUNT] = {
             .type = FLASH_STORAGE_TYPE_U64,
             .size = sizeof(uint64_t),
         },
+    [FLASH_STORAGE_ITEM_UTC_OFFSET_MS] =
+        {
+            .id = FLASH_STORAGE_ITEM_UTC_OFFSET_MS,
+            .key = "utc_offset_ms",
+            .type = FLASH_STORAGE_TYPE_U64,
+            .size = sizeof(uint64_t),
+        },
     [FLASH_STORAGE_ITEM_ROBOT_STATUS] =
         {
             .id = FLASH_STORAGE_ITEM_ROBOT_STATUS,
@@ -155,4 +162,16 @@ uint64_t flash_storage_get_total_runtime_ms(void)
 esp_err_t flash_storage_set_total_runtime_ms(uint64_t runtime_ms)
 {
   return flash_storage_set(FLASH_STORAGE_ITEM_TOTAL_RUNTIME_MS, &runtime_ms, sizeof(runtime_ms));
+}
+
+uint64_t flash_storage_get_utc_offset_ms(void)
+{
+  uint64_t offset_ms;
+  size_t size = sizeof(offset_ms);
+  return flash_storage_get(FLASH_STORAGE_ITEM_UTC_OFFSET_MS, &offset_ms, &size) == ESP_OK ? offset_ms : 0;
+}
+
+esp_err_t flash_storage_set_utc_offset_ms(uint64_t offset_ms)
+{
+  return flash_storage_set(FLASH_STORAGE_ITEM_UTC_OFFSET_MS, &offset_ms, sizeof(offset_ms));
 }

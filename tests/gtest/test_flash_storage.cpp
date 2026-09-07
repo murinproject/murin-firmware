@@ -31,6 +31,7 @@ TEST_F(FlashStorageTest, UsesDefaultsWhenValuesAreMissing)
   EXPECT_TRUE(flash_storage_get_telemetry_enabled(true));
   EXPECT_FALSE(flash_storage_get_telemetry_enabled(false));
   EXPECT_EQ(flash_storage_get_total_runtime_ms(), 0u);
+  EXPECT_EQ(flash_storage_get_utc_offset_ms(), 0u);
 }
 
 TEST_F(FlashStorageTest, StoresAndLoadsTypedValues)
@@ -40,6 +41,9 @@ TEST_F(FlashStorageTest, StoresAndLoadsTypedValues)
 
   EXPECT_EQ(flash_storage_set_total_runtime_ms(9876543210123ULL), ESP_OK);
   EXPECT_EQ(flash_storage_get_total_runtime_ms(), 9876543210123ULL);
+
+  EXPECT_EQ(flash_storage_set_utc_offset_ms(1788796798766ULL), ESP_OK);
+  EXPECT_EQ(flash_storage_get_utc_offset_ms(), 1788796798766ULL);
 
   uint8_t enabled = 0;
   size_t enabled_size = sizeof(enabled);

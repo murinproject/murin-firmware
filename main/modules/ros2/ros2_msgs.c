@@ -16,6 +16,7 @@
 #include "freertos/timers.h"
 #include "navigation.h"
 #include "sdkconfig.h"
+#include <sys/time.h>
 #endif
 
 #include "diag.h"
@@ -38,6 +39,7 @@ static TimerHandle_t telemetry_timer = NULL;
 
 static volatile bool telemetry_enabled = true;
 static uint64_t total_runtime_ms = 0;
+static uint64_t utc_offset_ms = 0;
 #ifndef UNIT_TEST
 static int64_t runtime_start_us = 0;
 #endif
@@ -59,11 +61,37 @@ static void ros2_msgs_handle_frame(void *ctx, uint8_t msg_type, uint8_t seq, con
 static void ros2_msgs_send_imu_state_sample(ros2_msgs_ctx_t *msgs, uint8_t seq, const navigation_imu_sample_t *sample);
 static void ros2_msgs_queue_drive_state(void);
 
+static bool ros2_msgs_set_utc(uint64_t unix_seconds)
+{
+  if (unix_seconds > INT64_MAX / 1000)
+    return false;
+#ifdef UNIT_TEST
+  const uint64_t uptime_ms = ros2_host_get_uptime_ms();
+#else
+  const uint64_t uptime_ms = (uint64_t)(esp_timer_get_time() / 1000);
+#endif
+  const uint64_t unix_ms = unix_seconds * 1000;
+  if (unix_ms < uptime_ms)
+    return false;
+  const uint64_t offset_ms = unix_ms - uptime_ms;
+#ifdef UNIT_TEST
+  if (!ros2_host_set_time(unix_seconds))
+    return false;
+#else
+  const struct timeval now = {.tv_sec = (time_t)unix_seconds, .tv_usec = 0};
+  if (settimeofday(&now, NULL) != 0 || flash_storage_set_utc_offset_ms(offset_ms) != ESP_OK)
+    return false;
+#endif
+  utc_offset_ms = offset_ms;
+  return true;
+}
+
 #ifndef UNIT_TEST
 static void ros2_msgs_load_settings(void)
 {
   telemetry_enabled = flash_storage_get_telemetry_enabled(true);
   total_runtime_ms = flash_storage_get_total_runtime_ms();
+  utc_offset_ms = flash_storage_get_utc_offset_ms();
 }
 
 static void ros2_msgs_save_runtime(void)
@@ -160,6 +188,8 @@ uint64_t ros2_msgs_get_total_runtime_ms(void)
   return total_runtime_ms + (uint64_t)((now_us - runtime_start_us) / 1000);
 #endif
 }
+
+uint64_t ros2_msgs_get_utc_offset_ms(void) { return utc_offset_ms; }
 
 void ros2_command_task(void *pvParameters)
 {
@@ -416,6 +446,21 @@ static void ros2_msgs_handle_message(ros2_msgs_ctx_t *msgs, uint8_t msg_type, ui
       ESP_LOGI(TAG, "CONFIG seq=%u key=%u value=%ld", seq, key, (long)value);
 
       ros2_msgs_send_ack(msgs, seq);
+    } else {
+      ros2_msgs_send_nack(msgs, seq, ROS2_MSG_ERR_LEN);
+    }
+    break;
+
+  case ROS2_MSG_SET_TIME:
+    if (len == sizeof(uint64_t)) {
+      uint64_t unix_seconds;
+      memcpy(&unix_seconds, payload, sizeof(unix_seconds));
+      if (ros2_msgs_set_utc(unix_seconds)) {
+        ESP_LOGI(TAG, "UTC set to Unix timestamp %llu", (unsigned long long)unix_seconds);
+        ros2_msgs_send_ack(msgs, seq);
+      } else {
+        ros2_msgs_send_nack(msgs, seq, ROS2_MSG_ERR_RANGE);
+      }
     } else {
       ros2_msgs_send_nack(msgs, seq, ROS2_MSG_ERR_LEN);
     }

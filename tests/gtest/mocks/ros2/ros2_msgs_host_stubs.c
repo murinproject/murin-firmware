@@ -29,6 +29,7 @@ static bool timer_enabled;
 static TickType_t timer_period;
 static uint8_t rx_data[CONFIG_TINYUSB_CDC_RX_BUFSIZE];
 static size_t rx_length;
+static uint64_t last_set_time;
 static jmp_buf task_exit;
 static bool task_running, task_waited;
 
@@ -47,7 +48,20 @@ void ros2_host_reset(void)
   rx_callback = NULL;
   timer_enabled = task_running = task_waited = false;
   timer_period = 0;
+  last_set_time = 0;
 }
+
+bool ros2_host_set_time(uint64_t unix_seconds)
+{
+  if (ros2_host_faults.set_time_fails)
+    return false;
+  last_set_time = unix_seconds;
+  return true;
+}
+
+uint64_t ros2_host_last_set_time(void) { return last_set_time; }
+
+uint64_t ros2_host_get_uptime_ms(void) { return 1234; }
 
 static host_task_t *find_task(const char *name)
 {
