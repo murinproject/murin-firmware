@@ -98,8 +98,11 @@ target_link_libraries(diff_drive_unittest PRIVATE diff_drive gtest_main)
 
 add_test(NAME diff_drive_unittest COMMAND diff_drive_unittest)
 
-add_library(diag ${CMAKE_CURRENT_SOURCE_DIR}/../../main/modules/diag/diag.c
-                 ${CMAKE_CURRENT_SOURCE_DIR}/mocks/diag/diag_host_stubs.c)
+add_library(
+  diag
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../main/modules/diag/diag.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../main/modules/system_log/system_log.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/mocks/diag/diag_host_stubs.c)
 target_include_directories(
   diag
   PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/mocks/diag
@@ -107,6 +110,7 @@ target_include_directories(
           ${CMAKE_CURRENT_SOURCE_DIR}/../../main/modules/battery
           ${CMAKE_CURRENT_SOURCE_DIR}/../../main/modules/link
           ${CMAKE_CURRENT_SOURCE_DIR}/../../main/modules/rp3
+          ${CMAKE_CURRENT_SOURCE_DIR}/../../main/modules/system_log
           ${COMMON_MOCK_INCLUDE_DIR})
 set_target_properties(diag PROPERTIES LINKER_LANGUAGE C)
 
@@ -118,6 +122,7 @@ target_include_directories(
           ${CMAKE_CURRENT_SOURCE_DIR}/../../main/modules/battery
           ${CMAKE_CURRENT_SOURCE_DIR}/../../main/modules/link
           ${CMAKE_CURRENT_SOURCE_DIR}/../../main/modules/rp3
+          ${CMAKE_CURRENT_SOURCE_DIR}/../../main/modules/system_log
           ${COMMON_MOCK_INCLUDE_DIR})
 target_compile_features(diag_unittest PRIVATE cxx_std_11)
 target_link_libraries(diag_unittest PRIVATE diag gtest_main)

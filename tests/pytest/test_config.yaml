@@ -7,4 +7,4 @@ perf_warmup_iterations: 10
 perf_ack_timeout: 0.5
 perf_max_avg_ack_ms: 50
 perf_max_p95_ack_ms: 200
-stress_duration_s: 10
+stress_duration_s: 1

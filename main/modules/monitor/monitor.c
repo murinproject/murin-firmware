@@ -6,6 +6,7 @@
 
 #include "diag.h"
 #include "diff_drive.h"
+#include "esp_heap_caps.h"
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
@@ -14,6 +15,7 @@
 #include "navigation.h"
 #include "ros2_msgs.h"
 #include "shell_uart.h"
+#include "system_log.h"
 
 #define ROS2_MONITOR_QUEUE_LENGTH 16
 #define ROS2_MONITOR_TASK_STACK_SIZE 4096
@@ -30,6 +32,8 @@ typedef enum {
   MONITOR_EVENT_RP3,
   MONITOR_EVENT_DIFF_DRIVE,
   MONITOR_EVENT_NAVIGATION,
+  MONITOR_EVENT_SYSTEM,
+  MONITOR_EVENT_SYSTEM_HISTORY,
 } monitor_event_type_t;
 
 typedef struct {
@@ -40,6 +44,7 @@ typedef struct {
     rp3_signal_sample_t rp3;
     diff_drive_state_t diff_drive;
     navigation_imu_sample_t navigation;
+    system_log_record_t system;
   } data;
 } monitor_event_t;
 
@@ -49,6 +54,8 @@ static volatile bool s_monitor_enabled;
 static volatile bool s_rp3_monitor_enabled;
 static volatile bool s_diff_drive_monitor_enabled;
 static volatile bool s_navigation_monitor_enabled;
+static volatile bool s_system_monitor_enabled;
+static volatile bool s_system_history_replaying;
 static volatile bool s_rp3_display_started;
 static bool s_navigation_display_started;
 static rp3_signal_sample_t s_rp3_displayed_sample;
@@ -128,6 +135,18 @@ static void navigation_monitor_callback(const navigation_imu_sample_t *sample)
   (void)xQueueSend(s_monitor_queue, &event, 0);
 }
 
+static void system_monitor_callback(const system_log_record_t *record)
+{
+  if (!s_system_monitor_enabled || s_system_history_replaying || s_monitor_queue == NULL || record == NULL)
+    return;
+
+  monitor_event_t event = {
+      .type = MONITOR_EVENT_SYSTEM,
+      .data.system = *record,
+  };
+  (void)xQueueSend(s_monitor_queue, &event, 0);
+}
+
 static void append_bar(char *line, size_t line_size, size_t *length, uint16_t value)
 {
   const uint16_t clamped = value < RP3_CHANNEL_VALUE_MIN
@@ -156,6 +175,28 @@ static void ros2_monitor_task(void *arg)
   while (1) {
     if (xQueueReceive(s_monitor_queue, &event, portMAX_DELAY) != pdTRUE)
       continue;
+
+    if (event.type == MONITOR_EVENT_SYSTEM_HISTORY) {
+      diag_system_log_t *records =
+          heap_caps_malloc(DIAG_SYSTEM_LOG_CAPACITY * sizeof(*records), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+      if (records != NULL) {
+        const size_t record_count = diag_get_system_logs(records, DIAG_SYSTEM_LOG_CAPACITY);
+        shell_printf("System log history: %u record(s)\r\n", (unsigned)record_count);
+        for (size_t i = 0; i < record_count; i++)
+          shell_printf("%" PRIi64 " us: %s", records[i].timestamp_us, records[i].message);
+        heap_caps_free(records);
+      } else {
+        shell_write("Unable to allocate system log history buffer\r\n");
+      }
+      s_system_history_replaying = false;
+      continue;
+    }
+
+    if (event.type == MONITOR_EVENT_SYSTEM) {
+      if (s_system_monitor_enabled)
+        shell_printf("%" PRIi64 " us: %s", event.data.system.timestamp_us, event.data.system.message);
+      continue;
+    }
 
     if (event.type == MONITOR_EVENT_RP3) {
       if (!s_rp3_monitor_enabled)
@@ -290,6 +331,7 @@ void monitor_init(void)
   rp3_receiver_set_monitor(rp3_monitor_callback);
   motor_set_monitor_callback(diff_drive_monitor_callback);
   navigation_set_monitor(navigation_monitor_callback);
+  system_log_set_monitor(system_monitor_callback);
   if (xTaskCreate(ros2_monitor_task, "monitor", ROS2_MONITOR_TASK_STACK_SIZE, NULL, ROS2_MONITOR_TASK_PRIORITY, NULL) !=
       pdPASS) {
     ESP_LOGE(TAG, "Unable to create ROS2 monitor task");
@@ -299,6 +341,7 @@ void monitor_init(void)
     rp3_receiver_set_monitor(NULL);
     motor_set_monitor_callback(NULL);
     navigation_set_monitor(NULL);
+    system_log_set_monitor(NULL);
   }
 }
 
@@ -343,3 +386,19 @@ void monitor_navigation_enable(bool enabled)
 }
 
 bool monitor_navigation_is_enable(void) { return s_navigation_monitor_enabled; }
+
+void monitor_system_enable(bool enabled)
+{
+  s_system_monitor_enabled = enabled;
+  if (!enabled && s_monitor_queue != NULL) {
+    s_system_history_replaying = false;
+    xQueueReset(s_monitor_queue);
+  } else if (enabled && s_monitor_queue != NULL) {
+    s_system_history_replaying = true;
+    const monitor_event_t event = {.type = MONITOR_EVENT_SYSTEM_HISTORY};
+    if (xQueueSend(s_monitor_queue, &event, 0) != pdTRUE)
+      s_system_history_replaying = false;
+  }
+}
+
+bool monitor_system_is_enable(void) { return s_system_monitor_enabled; }

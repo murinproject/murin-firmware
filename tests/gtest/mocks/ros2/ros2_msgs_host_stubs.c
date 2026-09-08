@@ -225,6 +225,8 @@ size_t usb_bridge_read_bytes(uint8_t *data, size_t len)
 
 void usb_bridge_init(void) {}
 
+bool usb_bridge_is_connected(void) { return true; }
+
 void usb_bridge_set_callback(usb_bridge_cb_t callback) { rx_callback = callback; }
 
 void diag_log_ros2(uint8_t msg_type, uint8_t seq, const uint8_t *payload, size_t payload_len)

@@ -15,6 +15,8 @@ void monitor_diff_drive_enable(bool enabled);
 bool monitor_diff_drive_is_enable(void);
 void monitor_navigation_enable(bool enabled);
 bool monitor_navigation_is_enable(void);
+void monitor_system_enable(bool enabled);
+bool monitor_system_is_enable(void);
 
 #ifdef __cplusplus
 }

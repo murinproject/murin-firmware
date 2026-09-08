@@ -1,7 +1,5 @@
 #include "diag.h"
 
-#include <stdarg.h>
-#include <stdio.h>
 #include <string.h>
 
 #include "battery.h"
@@ -13,7 +11,6 @@
 #define DIAG_RP3_LOG_CAPACITY 4096
 #define DIAG_ROS2_LOG_CAPACITY 4096
 #define DIAG_BATTERY_LOG_CAPACITY 4096
-#define DIAG_SYSTEM_LOG_CAPACITY 1024
 #define DIAG_BATTERY_SAMPLE_PERIOD_MS 1000
 
 static const char *TAG = "diag";
@@ -26,10 +23,9 @@ static size_t s_battery_log_count;
 static ros2_diag_message_t *s_ros2_log;
 static size_t s_ros2_log_head;
 static size_t s_ros2_log_count;
-static diag_system_log_t *s_system_log;
+static system_log_record_t *s_system_log;
 static size_t s_system_log_head;
 static size_t s_system_log_count;
-static vprintf_like_t s_default_vprintf;
 static portMUX_TYPE s_diag_lock = portMUX_INITIALIZER_UNLOCKED;
 
 static void diag_battery_task(void *arg)
@@ -54,21 +50,6 @@ static void diag_battery_task(void *arg)
 
     vTaskDelay(pdMS_TO_TICKS(DIAG_BATTERY_SAMPLE_PERIOD_MS));
   }
-}
-
-static int diag_log_vprintf(const char *format, va_list args)
-{
-  char message[DIAG_SYSTEM_LOG_MESSAGE_MAX];
-  va_list copy;
-
-  va_copy(copy, args);
-  vsnprintf(message, sizeof(message), format, copy);
-  va_end(copy);
-  diag_log_system(message);
-
-  if (s_default_vprintf != NULL)
-    return s_default_vprintf(format, args);
-  return vprintf(format, args);
 }
 
 void diag_init(void)
@@ -118,7 +99,6 @@ void diag_init(void)
   s_ros2_log_count = 0;
   s_system_log_head = 0;
   s_system_log_count = 0;
-  s_default_vprintf = esp_log_set_vprintf(diag_log_vprintf);
   if (xTaskCreate(diag_battery_task, "diag_battery", 3072, NULL, 2, NULL) != pdPASS)
     ESP_LOGE(TAG, "Unable to create battery diagnostic task");
 
@@ -128,14 +108,24 @@ void diag_init(void)
 
 void diag_log_system(const char *message)
 {
-  if (s_system_log == NULL || message == NULL)
+  if (message == NULL)
+    return;
+
+  system_log_record_t record = {
+      .timestamp_us = esp_timer_get_time(),
+  };
+  strncpy(record.message, message, sizeof(record.message) - 1);
+  record.message[sizeof(record.message) - 1] = '\0';
+  diag_log_system_record(&record);
+}
+
+void diag_log_system_record(const system_log_record_t *record)
+{
+  if (s_system_log == NULL || record == NULL)
     return;
 
   taskENTER_CRITICAL(&s_diag_lock);
-  diag_system_log_t *record = &s_system_log[s_system_log_head];
-  record->timestamp_us = esp_timer_get_time();
-  strncpy(record->message, message, sizeof(record->message) - 1);
-  record->message[sizeof(record->message) - 1] = '\0';
+  s_system_log[s_system_log_head] = *record;
   s_system_log_head = (s_system_log_head + 1) % DIAG_SYSTEM_LOG_CAPACITY;
   if (s_system_log_count < DIAG_SYSTEM_LOG_CAPACITY)
     s_system_log_count++;

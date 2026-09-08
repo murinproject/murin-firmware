@@ -14,6 +14,7 @@ set(COMPONENT_SRCS
     "modules/rp3/rp3_receiver.c"
     "modules/shell/shell_command.c"
     "modules/shell/shell_uart.c"
+    "modules/system_log/system_log.c"
     "modules/usb/usb_bridge.c")
 
 set(COMPONENT_INCLUDE_DIRS
@@ -30,6 +31,7 @@ set(COMPONENT_INCLUDE_DIRS
     "modules/ros2"
     "modules/rp3"
     "modules/shell"
+    "modules/system_log"
     "modules/usb")
 
 set(COMPONENT_PRIV_REQUIRES

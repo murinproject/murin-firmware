@@ -179,20 +179,21 @@ static void shell_task(void *arg)
       continue;
     }
 
-    /* Allow the live ROS2 monitor to be stopped without a command line. */
+    /* Allow the active monitor to be stopped without a command line. */
     if ((monitor_ros2_is_enable() || monitor_rp3_is_enable() || monitor_diff_drive_is_enable() ||
-         monitor_navigation_is_enable()) &&
+         monitor_navigation_is_enable() || monitor_system_is_enable()) &&
         (ch == 0x03 || (ch == 'q' && line_length == 0))) {
       monitor_ros2_enable(false);
       monitor_rp3_enable(false);
       monitor_diff_drive_enable(false);
       monitor_navigation_enable(false);
+      monitor_system_enable(false);
       shell_write("\r\n\033[2K\033[?25hMonitor disabled\r\n");
       line_length = 0;
       cursor_pos = 0;
       history_index = -1;
       if (!monitor_ros2_is_enable() && !monitor_rp3_is_enable() && !monitor_diff_drive_is_enable() &&
-          !monitor_navigation_is_enable())
+          !monitor_navigation_is_enable() && !monitor_system_is_enable())
         shell_write("shell> ");
       continue;
     }

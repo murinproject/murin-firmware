@@ -20,6 +20,8 @@ static volatile bool cdc_rts = false;
 
 size_t usb_bridge_write(const char *data, size_t len) { return usb_bridge_write_bytes((uint8_t *)data, len); }
 
+bool usb_bridge_is_connected(void) { return cdc_dtr; }
+
 size_t usb_bridge_write_bytes(uint8_t *data, size_t len)
 {
   size_t offset = 0;

@@ -7,6 +7,7 @@
 extern "C" {
 #include "diag.h"
 #include "diag_host_stubs.h"
+#include "system_log.h"
 }
 
 namespace {
@@ -17,6 +18,8 @@ TEST(DiagTest, InitializesStorageAndRecordsAllLogTypes)
   diag_host_state.time_us = 100;
   diag_host_state.task_create_fails = true;
   diag_init();
+  diag_host_set_return_previous_log_callback(true);
+  system_log_init();
 
   EXPECT_EQ(diag_host_state.allocation_calls, 4u);
   EXPECT_TRUE(diag_host_state.battery_task_registered);
@@ -28,15 +31,14 @@ TEST(DiagTest, InitializesStorageAndRecordsAllLogTypes)
   EXPECT_STREQ(system_record.message, "system ready");
 
   diag_host_state.time_us = 150;
-  EXPECT_EQ(diag_host_emit_log("battery=%d", 42), 10);
+  EXPECT_EQ(diag_host_emit_log("battery=%d", 42), 123);
+  EXPECT_EQ(diag_host_state.forwarded_log_calls, 1u);
   ASSERT_EQ(diag_get_system_logs(&system_record, 1), 1u);
   EXPECT_EQ(system_record.timestamp_us, 150);
   EXPECT_STREQ(system_record.message, "battery=42");
 
-  diag_host_set_return_previous_log_callback(true);
-  diag_init();
   EXPECT_EQ(diag_host_emit_log("forwarded"), 123);
-  EXPECT_EQ(diag_host_state.forwarded_log_calls, 1u);
+  EXPECT_EQ(diag_host_state.forwarded_log_calls, 2u);
 
   rp3_signal_sample_t rp3{};
   rp3.timestamp_us = 200;

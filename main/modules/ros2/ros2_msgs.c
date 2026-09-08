@@ -61,6 +61,15 @@ static void ros2_msgs_handle_frame(void *ctx, uint8_t msg_type, uint8_t seq, con
 static void ros2_msgs_send_imu_state_sample(ros2_msgs_ctx_t *msgs, uint8_t seq, const navigation_imu_sample_t *sample);
 static void ros2_msgs_queue_drive_state(void);
 
+static bool ros2_msgs_transport_connected(void)
+{
+#if defined(CONFIG_ROS2_TRANSPORT_UART) && CONFIG_ROS2_TRANSPORT_UART
+  return true;
+#else
+  return usb_bridge_is_connected();
+#endif
+}
+
 static bool ros2_msgs_set_utc(uint64_t unix_seconds)
 {
   if (unix_seconds > INT64_MAX / 1000)
@@ -224,20 +233,26 @@ void ros2_telemetry_task(void *pvParameters)
   while (1) {
     ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 
+    /* Opening the USB CDC port asserts DTR. Drop queued telemetry while no
+     * host is connected instead of
+     * repeatedly attempting writes that cannot
+     * succeed. Command responses remain unaffected. */
+    const bool can_publish = ros2_msgs_transport_connected();
+
     navigation_imu_sample_t sample;
     while (xQueueReceive(imu_state_tx_queue, &sample, 0) == pdTRUE) {
-      if (telemetry_enabled && (telemetry_mask & ROS2_TELEM_MASK_IMU_STATE) != 0)
+      if (can_publish && telemetry_enabled && (telemetry_mask & ROS2_TELEM_MASK_IMU_STATE) != 0)
         ros2_msgs_send_imu_state_sample(msgs, msgs->tx_seq++, &sample);
     }
 
     uint8_t battery_pending;
     while (xQueueReceive(battery_state_tx_queue, &battery_pending, 0) == pdTRUE) {
-      if (telemetry_enabled && (telemetry_mask & ROS2_TELEM_MASK_BATTERY_STATE) != 0)
+      if (can_publish && telemetry_enabled && (telemetry_mask & ROS2_TELEM_MASK_BATTERY_STATE) != 0)
         ros2_msgs_send_battery_state(msgs, msgs->tx_seq++);
     }
     drive_state_t drive_state;
     while (xQueueReceive(drive_state_tx_queue, &drive_state, 0) == pdTRUE) {
-      if (telemetry_enabled && (telemetry_mask & ROS2_TELEM_MASK_DRIVE_STATE) != 0)
+      if (can_publish && telemetry_enabled && (telemetry_mask & ROS2_TELEM_MASK_DRIVE_STATE) != 0)
         ros2_msgs_send_drive_state(msgs, msgs->tx_seq++, &drive_state);
     }
     // ESP_LOGI(TAG, "Sending telemetry %u", msgs->tx_seq);

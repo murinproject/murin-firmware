@@ -117,6 +117,7 @@ def test_diag_commands(console_serial, target, expected):
         ("ros2", "ROS2 monitor enabled"),
         ("rp3", "RP3 monitor enabled"),
         ("diff_drive", "DIFF_DRIVE monitor enabled"),
+        ("system", "SYSTEM monitor enabled"),
     ],
 )
 def test_monitor_commands(console_serial, monitor, expected):

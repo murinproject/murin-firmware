@@ -7,6 +7,7 @@
 #include "esp_err.h"
 #include "framed_link.h"
 #include "rp3_receiver.h"
+#include "system_log.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -35,14 +36,12 @@ typedef struct {
 void diag_log_ros2(uint8_t msg_type, uint8_t seq, const uint8_t *payload, size_t payload_len);
 size_t diag_get_ros2_logs(ros2_diag_message_t *records, size_t max_records);
 
-#define DIAG_SYSTEM_LOG_MESSAGE_MAX 192
-
-typedef struct {
-  int64_t timestamp_us;
-  char message[DIAG_SYSTEM_LOG_MESSAGE_MAX];
-} diag_system_log_t;
+#define DIAG_SYSTEM_LOG_MESSAGE_MAX SYSTEM_LOG_MESSAGE_MAX
+#define DIAG_SYSTEM_LOG_CAPACITY 1024U
+typedef system_log_record_t diag_system_log_t;
 
 void diag_log_system(const char *message);
+void diag_log_system_record(const system_log_record_t *record);
 size_t diag_get_system_logs(diag_system_log_t *records, size_t max_records);
 
 #ifdef __cplusplus
