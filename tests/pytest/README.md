@@ -2,7 +2,7 @@
 
 This directory contains pytest-based tests for the ESP32 framed-link, ROS2
 protocol, and UART shell. The tests require a running firmware image and use
-serial ports configured in `test_config.yaml`.
+serial ports configured in the repository-root `config.yaml`.
 
 ## Test files
 
@@ -11,7 +11,7 @@ serial ports configured in `test_config.yaml`.
 - `test_perf.py` — heartbeat ACK latency and throughput test.
 - `test_stress.py` — sustained heartbeat test with a live progress bar.
 - `conftest.py` — shared serial fixtures and configuration loading.
-- `test_config.yaml` — local serial ports and test thresholds.
+- `../../config.yaml.example` — tracked template for local serial ports and test thresholds.
 
 ## Prerequisites
 
@@ -26,16 +26,16 @@ Connect the board over USB before running hardware-backed tests.
 
 ## Configure serial ports
 
-Edit [`test_config.yaml`](test_config.yaml):
+Run a test or host tool once to create `config.yaml` from [`config.yaml.example`](../../config.yaml.example), then edit the root file:
 
 ```yaml
-cdc_port: "COM12"
+robot_port: "COM12"
 console_port: "COM10"
 console_baudrate: 115200
-baudrate: 2000000
+robot_baudrate: 2000000
 ```
 
-`cdc_port` is used by the ROS2 protocol, performance, and stress tests.
+`robot_port` is used by the ROS2 protocol, performance, and stress tests.
 `console_port` is used by the UART shell tests. A missing port causes the
 corresponding hardware tests to be skipped.
 
@@ -67,7 +67,7 @@ also runs pytest and the GoogleTest suite together.
 
 ## Performance settings
 
-`test_perf.py` reads these optional keys from `test_config.yaml`:
+`test_perf.py` reads these optional keys from the root `config.yaml`:
 
 ```yaml
 perf_iterations: 200
@@ -102,8 +102,7 @@ any other program using the same port.
 If ACK tests time out, confirm that the firmware implements the matching
 protocol and that the configured baud rate matches the host configuration.
 
-If tests are skipped, check that the required port is present in
-`test_config.yaml`.
+If tests are skipped, check that the required port is present in the root `config.yaml`.
 
 If imports fail, reinstall the dependencies:
 

@@ -1,0 +1,18 @@
+# Firmware tools create config.yaml from this file when needed.
+robot_port: ""
+robot_baudrate: 2000000
+console_port: ""
+console_baudrate: 115200
+
+perf_iterations: 200
+perf_warmup_iterations: 10
+perf_ack_timeout: 0.5
+perf_ack_retries: 2
+perf_max_avg_ack_ms: 50
+perf_max_p95_ack_ms: 200
+
+stress_duration_s: 10
+stress_ack_timeout: 0.5
+stress_ack_retries: 2
+
+web_port: 8080

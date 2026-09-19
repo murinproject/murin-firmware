@@ -5,7 +5,9 @@ const fs = require("fs");
 const http = require("http");
 const path = require("path");
 
-const CONFIG_PATH = path.join(__dirname, "config.yaml");
+const ROOT_DIR = path.resolve(__dirname, "..");
+const CONFIG_PATH = path.join(ROOT_DIR, "config.yaml");
+const CONFIG_EXAMPLE_PATH = path.join(ROOT_DIR, "config.yaml.example");
 
 const SOF = 0xaa;
 const ESCAPE = 0x1b;
@@ -60,6 +62,16 @@ const CONFIG_KEY_NAMES = new Map([
 ]);
 
 function loadConfig() {
+  if (!fs.existsSync(CONFIG_PATH)) {
+    try {
+      fs.copyFileSync(CONFIG_EXAMPLE_PATH, CONFIG_PATH, fs.constants.COPYFILE_EXCL);
+      if (process.platform !== "win32") fs.chmodSync(CONFIG_PATH, 0o600);
+      console.log(`Created local configuration: ${CONFIG_PATH}`);
+    } catch (err) {
+      if (err.code !== "EEXIST") throw err;
+    }
+  }
+
   try {
     const text = fs.readFileSync(CONFIG_PATH, "utf8");
     const config = {};
@@ -143,8 +155,8 @@ function parseHexPayload(value) {
 function parseArgs(argv) {
   const config = loadConfig();
   const args = {
-    port: config.port,
-    baudrate: config.baudrate || 2000000,
+    port: config.robot_port,
+    baudrate: config.robot_baudrate || 2000000,
     raw: false,
     web: false,
     webPort: config.web_port || 8080,

@@ -12,28 +12,19 @@ import time
 from pathlib import Path
 
 import serial
-import yaml
 
 
 # Keep this tool runnable from the repository root as well as from ``tools``.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "utils"))
 
+from host_config import CONFIG_PATH, load_config  # noqa: E402
 from protocol_common import MSG_CMD_MOTOR, build_frame, encode_motor  # noqa: E402
 
 
-CONFIG_PATH = Path(__file__).with_name("config.yaml")
 MAX_INTERFACE_SPEED_MPS = 10.0
 RAMP_MESSAGES = 6
 MOTION_HOLD_SECONDS = 2.0
 ZERO_HOLD_SECONDS = 1.0
-
-
-def load_config() -> dict:
-    try:
-        with CONFIG_PATH.open("r", encoding="utf-8") as config_file:
-            return yaml.safe_load(config_file) or {}
-    except FileNotFoundError:
-        return {}
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
@@ -42,10 +33,10 @@ def build_arg_parser() -> argparse.ArgumentParser:
         description="Send a repeating positive/negative equal-wheel velocity trajectory."
     )
     parser.add_argument(
-        "--port", default=config.get("port"), help="Serial port, e.g. COM11"
+        "--port", default=config.get("robot_port"), help="Serial port, e.g. COM11"
     )
     parser.add_argument(
-        "--baudrate", type=int, default=config.get("baudrate", 2_000_000)
+        "--baudrate", type=int, default=config.get("robot_baudrate", 2_000_000)
     )
     parser.add_argument(
         "--interval",

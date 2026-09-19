@@ -80,3 +80,5 @@ Desktop.ini
 
 # nodejs dependencies (if using JavaScript/TypeScript for tooling)
 node_modules/
+# Machine-local firmware test and tool settings
+/config.yaml

@@ -1,11 +1,14 @@
-<#
-.SYNOPSIS
-Runs pytest, GoogleTest, and LLVM coverage analysis.
+# Uses the same Python implementation and options as the .sh wrapper.
+$ErrorActionPreference = "Stop"
 
-.DESCRIPTION
-Forwards all arguments to scripts/test-all.py.
-#>
-
-$ErrorActionPreference = 'Stop'
-python "$PSScriptRoot\test-all.py" @args
+# Prefer an active virtual environment; fall back to the Windows Python launcher.
+if (Get-Command python -ErrorAction SilentlyContinue) {
+    & python "$PSScriptRoot/test-all.py" @args
+} elseif (Get-Command py -ErrorAction SilentlyContinue) {
+    & py -3 "$PSScriptRoot/test-all.py" @args
+} elseif (Get-Command python3 -ErrorAction SilentlyContinue) {
+    & python3 "$PSScriptRoot/test-all.py" @args
+} else {
+    throw "Python 3 is required. Install Python and add it to PATH."
+}
 exit $LASTEXITCODE

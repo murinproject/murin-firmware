@@ -237,6 +237,14 @@ void diag_log_ros2(uint8_t msg_type, uint8_t seq, const uint8_t *payload, size_t
   (void)payload_len;
 }
 
+void motor_get(float *left_mps, float *right_mps)
+{
+  if (left_mps != NULL)
+    *left_mps = 0.25f;
+  if (right_mps != NULL)
+    *right_mps = -0.5f;
+}
+
 bool motor_set(float left_mps, float right_mps)
 {
   (void)left_mps;

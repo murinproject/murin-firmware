@@ -8,25 +8,14 @@ import struct
 import sys
 import threading
 import time
-import yaml
 from pathlib import Path
 
 import serial
 
-CONFIG_PATH = Path(__file__).with_name("config.yaml")
-
-
-def load_config():
-    try:
-        with CONFIG_PATH.open("r", encoding="utf-8") as f:
-            return yaml.safe_load(f) or {}
-    except FileNotFoundError:
-        return {}
-
-
 # Add utils directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent / "utils"))
 
+from host_config import CONFIG_PATH, load_config
 from protocol_common import (
     CFG_TELEM_ENABLE,
     CFG_TELEM_MASK,
@@ -267,12 +256,12 @@ def build_arg_parser() -> argparse.ArgumentParser:
         description="Read and send ESP32 framed-link serial messages."
     )
     parser.add_argument(
-        "--port", default=config.get("port"), help="Serial port, e.g. COM11"
+        "--port", default=config.get("robot_port"), help="Serial port, e.g. COM11"
     )
     parser.add_argument(
         "--baudrate",
         type=float,
-        default=config.get("baudrate", 2_000_000),
+        default=config.get("robot_baudrate", 2_000_000),
         help="Serial baudrate",
     )
     parser.add_argument(

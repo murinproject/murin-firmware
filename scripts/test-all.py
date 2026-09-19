@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
+import argparse
 import os
 import re
 import shutil
 import subprocess
 import sys
 from pathlib import Path
-
 
 ROOT = Path(__file__).resolve().parent.parent
 GTEST_ROOT = ROOT / "tests" / "gtest"
@@ -54,6 +54,20 @@ def executable(build_dir: Path, name: str) -> Path:
     return build_dir / f"{name}{suffix}"
 
 
+def parse_gtest_summary(output: str) -> dict[str, int]:
+    """Handle CTest summaries with and without an explicit zero-failure count."""
+    counts = {"passed": 0, "failed": 0, "skipped": 0, "errors": 0, "total": 0}
+    summary = re.search(
+        r"(\d+)% tests passed(?:, (\d+) tests failed)? out of (\d+)", output
+    )
+    if summary:
+        counts["failed"] = int(summary.group(2) or 0)
+        counts["total"] = int(summary.group(3))
+        counts["passed"] = counts["total"] - counts["failed"]
+    counts["skipped"] = number(output, r"(\d+) tests? not run")
+    return counts
+
+
 def print_branch_coverage(lcov: str) -> None:
     """Show the same per-module branch totals used by genhtml."""
     print("\n=== Branch Coverage (LCOV) ===")
@@ -63,28 +77,47 @@ def print_branch_coverage(lcov: str) -> None:
             continue
         # genhtml counts BRDA records, including constant loop branches that
         # LLVM can omit from its BRF/BRH summary counters.
-        branches = [line.rsplit(",", 1)[-1] for line in record.splitlines() if line.startswith("BRDA:")]
+        branches = [
+            line.rsplit(",", 1)[-1]
+            for line in record.splitlines()
+            if line.startswith("BRDA:")
+        ]
         total = len(branches)
         covered = sum(taken != "-" and int(taken) > 0 for taken in branches)
         percent = f"{100 * covered / total:.2f}%" if total else "N/A"
         name = fields["SF"].replace("\\", "/").rsplit("/", 1)[-1]
-        print(f"{name:<18}: {percent} (covered={covered}, total={total}, missed={total - covered})")
+        print(
+            f"{name:<18}: {percent} (covered={covered}, total={total}, missed={total - covered})"
+        )
 
 
 def run_coverage() -> tuple[int, str]:
     """Build coverage and return its exit code plus report path or failure reason."""
-    required_tools = ("clang", "clang++", "ninja", "llvm-profdata", "llvm-cov", "genhtml")
+    required_tools = (
+        "clang",
+        "clang++",
+        "ninja",
+        "llvm-profdata",
+        "llvm-cov",
+        "genhtml",
+    )
     tools = {name: shutil.which(name) for name in required_tools}
     # Windows cannot launch LCOV's extensionless Perl script directly.
     if os.name == "nt" and tools["genhtml"] is None:
         tools["genhtml"] = next(
-            (str(Path(directory) / "genhtml") for directory in os.get_exec_path()
-             if (Path(directory) / "genhtml").is_file()),
+            (
+                str(Path(directory) / "genhtml")
+                for directory in os.get_exec_path()
+                if (Path(directory) / "genhtml").is_file()
+            ),
             None,
         )
     genhtml_command = [tools["genhtml"]]
-    if os.name == "nt" and tools["genhtml"] is not None and Path(tools["genhtml"]).suffix.lower() not in (
-        ".exe", ".com", ".bat", ".cmd"
+    if (
+        os.name == "nt"
+        and tools["genhtml"] is not None
+        and Path(tools["genhtml"]).suffix.lower()
+        not in (".exe", ".com", ".bat", ".cmd")
     ):
         tools["perl"] = shutil.which("perl")
         genhtml_command.insert(0, tools["perl"])
@@ -126,9 +159,7 @@ def run_coverage() -> tuple[int, str]:
         profile.unlink()
 
     coverage_env = os.environ.copy()
-    coverage_env["LLVM_PROFILE_FILE"] = str(
-        GTEST_COVERAGE_BUILD / "%p-%m.profraw"
-    )
+    coverage_env["LLVM_PROFILE_FILE"] = str(GTEST_COVERAGE_BUILD / "%p-%m.profraw")
     code, _ = run(
         [
             "ctest",
@@ -182,9 +213,7 @@ def run_coverage() -> tuple[int, str]:
     ]
 
     print("\n=== LLVM Coverage ===")
-    code, _ = run(
-        [tools["llvm-cov"], "report", *common_coverage_args, *sources]
-    )
+    code, _ = run([tools["llvm-cov"], "report", *common_coverage_args, *sources])
     if code != 0:
         return code, "FAILED (LLVM coverage report failed)"
 
@@ -217,25 +246,54 @@ def run_coverage() -> tuple[int, str]:
     )
     if code != 0:
         return code, "FAILED (genhtml report generation failed; see output above)"
-    report = f"PASSED ({html_dir / "index.html"})"
+    report = f"PASSED ({html_dir / 'index.html'})"
     return 0, report
 
 
 def main() -> int:
-    pytest_code, pytest_output = run(
-        [sys.executable, "-m", "pytest", "tests/pytest", *sys.argv[1:]]
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--host-only",
+        action="store_true",
+        help="Skip hardware-backed pytest; run host GoogleTests only",
     )
+    parser.add_argument(
+        "--no-coverage",
+        action="store_true",
+        help="Skip LLVM coverage build and reports",
+    )
+    options, pytest_args = parser.parse_known_args()
+    pytest_code, pytest_output = 0, ""
+    if options.host_only:
+        if pytest_args:
+            parser.error("pytest arguments are not used with --host-only")
+        print("Hardware pytest skipped (--host-only); no serial device will be opened.")
+    else:
+        pytest_code, pytest_output = run(
+            [sys.executable, "-m", "pytest", "tests/pytest", *pytest_args]
+        )
 
     gtest_output = ""
     gtest_code, _ = run(["cmake", "-S", str(GTEST_ROOT), "-B", str(GTEST_BUILD)])
     if gtest_code == 0:
-        gtest_code, _ = run(["cmake", "--build", str(GTEST_BUILD), "--config", "Release"])
+        gtest_code, _ = run(
+            ["cmake", "--build", str(GTEST_BUILD), "--config", "Release"]
+        )
     if gtest_code == 0:
         gtest_code, gtest_output = run(
-            ["ctest", "--test-dir", str(GTEST_BUILD), "--output-on-failure", "-C", "Release"]
+            [
+                "ctest",
+                "--test-dir",
+                str(GTEST_BUILD),
+                "--output-on-failure",
+                "-C",
+                "Release",
+            ]
         )
 
-    coverage_code, coverage_result = run_coverage()
+    coverage_code, coverage_result = (
+        (0, "NOT RUN") if options.no_coverage else run_coverage()
+    )
 
     pytest_counts = {
         "passed": number(pytest_output, r"(\d+)\s+passed"),
@@ -245,17 +303,18 @@ def main() -> int:
     }
     pytest_counts["total"] = sum(pytest_counts.values())
 
-    gtest_counts = {"passed": 0, "failed": 0, "skipped": 0, "errors": 0, "total": 0}
-    gtest_summary = re.search(r"(\d+)% tests passed, (\d+) tests failed out of (\d+)", gtest_output)
-    if gtest_summary:
-        gtest_counts["failed"] = int(gtest_summary.group(2))
-        gtest_counts["total"] = int(gtest_summary.group(3))
-        gtest_counts["passed"] = gtest_counts["total"] - gtest_counts["failed"]
-    gtest_counts["skipped"] = number(gtest_output, r"(\d+) tests? not run")
+    gtest_counts = parse_gtest_summary(gtest_output)
 
     print("\n=== Test Summary ===")
-    for name, counts, code in (("pytest", pytest_counts, pytest_code), ("gtest", gtest_counts, gtest_code)):
-        result = "PASSED" if code == 0 else "FAILED"
+    for name, counts, code in (
+        ("pytest", pytest_counts, pytest_code),
+        ("gtest", gtest_counts, gtest_code),
+    ):
+        result = (
+            "NOT RUN"
+            if name == "pytest" and options.host_only
+            else ("PASSED" if code == 0 else "FAILED")
+        )
         print(
             f"{name:<10}: {result} (total={counts['total']}, passed={counts['passed']}, "
             f"failed={counts['failed']}, skipped={counts['skipped']}, errors={counts['errors']})"

@@ -7,13 +7,13 @@ messages, and send command frames to a running firmware image.
 
 - `parser.py` — Python serial monitor and framed-link/ROS2 message sender.
 - `parser.js` — Node.js serial monitor and message sender.
-- `config.yaml` — local serial port configuration.
+- `../config.yaml.example` — tracked template for the shared local configuration.
 
-Configure the serial connection in `config.yaml`:
+The first tool or hardware test run creates root `config.yaml` from `config.yaml.example`. Configure the serial connection there:
 
 ```yaml
-port: "COM12"
-baudrate: 2000000
+robot_port: "COM12"
+robot_baudrate: 2000000
 ```
 
 ## Run the parsers

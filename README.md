@@ -17,10 +17,25 @@ Firmware and host-side tools for the Murin ESP32-S3 control system.
 
 ## 1. Prerequisites
 
-Install the Python and Node.js dependencies from the repository root:
+Create and activate the firmware Python environment, then install the host dependencies:
+
+```bash
+python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements.txt
+source .venv/bin/activate
+```
+
+On PowerShell:
 
 ```powershell
-python -m pip install -r requirements.txt
+py -m venv .venv
+.venv\Scripts\python -m pip install -r requirements.txt
+.venv\Scripts\Activate.ps1
+```
+
+Install Node.js dependencies separately when using the Node parser:
+
+```powershell
 npm install
 ```
 
@@ -58,6 +73,15 @@ The parser tools, serial configuration, and command examples are documented in
 
 ### 4.1 Run all tests
 
+On Linux, run hardware-free host tests with:
+
+```bash
+./scripts/test-all.sh --host-only --no-coverage
+```
+
+Omit `--no-coverage` to include LLVM coverage. Both options also work with the PowerShell wrapper. Without `--host-only`, the runner includes serial-backed pytest using the root `config.yaml`; stop the current serial owner and verify those device settings before running hardware tests.
+
+
 Run pytest, GoogleTest, and LLVM coverage analysis from the repository root:
 
 ```powershell
@@ -94,14 +118,10 @@ Run all configured formatters:
 The script formats:
 
 - C/C++ files under `main` and `tests` with `clang-format`
-- Python files under `tests`, `tools`, and `utils` with Ruff
+- Python files under `tests`, `tools`, `utils`, and `scripts` with Ruff
 - CMake files with `cmake-format`
 
-Install the Python formatters with:
-
-```powershell
-python -m pip install ruff cmakelang
-```
+The local `.venv` created above includes Ruff and cmake-format. The formatter uses it automatically.
 
 The LLVM installation provides `clang-format`.
 
@@ -151,3 +171,23 @@ python "C:\Program Files\LLVM\bin\run-clang-tidy" -p build
 | [ ] | P2 | Robot → Host | `PONG` | Respond to `PING` | None |
 | [ ] | P2 | Robot → Host | `TIME_SYNC_REQUIRED` | Notify host that valid absolute UTC time is unavailable | None |
 | [ ] | P1 | Internal | `BNO085_RECOVERY` | Detect repeated BNO085 read timeouts, reset the sensor, and re-enable configured reports | None |
+
+## ROS and web operation
+
+In `ROBOT_TRANSPORT=serial` mode the web server owns the robot serial port. In `ROBOT_TRANSPORT=socket` mode ROS C++ hardware owns it and a separate Python ROS service connects to the web server (default port 9091). Never run both serial owners together.
+
+Linux udev aliases are installed explicitly with `sudo ./scripts/create-udev-rules.sh`. Verify `/dev/murin-cdc` and `/dev/murin-console` identify the intended device; this script changes system rules and is not a test command. Stop the authorized serial owner before flashing or monitoring. After ESP32 reset, a ROS serial fault requires a clean single-stack restart; the driver does not reconnect automatically.
+
+See [AGENTS.md](AGENTS.md), the [ROS workspace guide](../murin-ros2/README.md), and [protocol.md](protocol.md). Firmware drive telemetry currently reports applied motor values, not encoder measurements.
+
+## Shell and PowerShell scripts
+
+Run the same workflow on Linux/macOS with `.sh`, or Windows with `.ps1`. Both wrappers use the same Python implementation, forward arguments, and preserve exit codes. Paths resolve from the script location, so callers need not be in the repository directory.
+
+| Workflow | Bash | PowerShell |
+| --- | --- | --- |
+| Check formatting | `./scripts/format-all.sh --check` | `.\scripts\format-all.ps1 --check` |
+| Apply formatting | `./scripts/format-all.sh` | `.\scripts\format-all.ps1` |
+| Test without hardware or coverage | `./scripts/test-all.sh --host-only --no-coverage` | `.\scripts\test-all.ps1 --host-only --no-coverage` |
+
+Firmware formatting requires `clang-format`, `ruff`, and `cmake-format`. Missing tools are reported before any file is changed. The udev installer remains Linux-only (`create-udev-rules.sh`); Windows uses COM ports and has no udev equivalent.

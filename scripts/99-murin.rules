@@ -1,0 +1,5 @@
+# Murin ESP32 dev kit USB-UART console.
+SUBSYSTEM=="tty", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="55d3", SYMLINK+="murin-console", GROUP="plugdev", MODE="0660"
+
+# Murin ESP32-S3 TinyUSB CDC port.
+SUBSYSTEM=="tty", ATTRS{idVendor}=="303a", ATTRS{idProduct}=="4001", ENV{ID_USB_INTERFACE_NUM}=="00", SYMLINK+="murin-cdc", GROUP="plugdev", MODE="0660"

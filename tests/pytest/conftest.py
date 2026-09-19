@@ -6,15 +6,13 @@ import logging
 from pathlib import Path
 
 import pytest
-import yaml
 
 
 # Add utils directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "utils"))
 
+from host_config import CONFIG_PATH, load_config
 from protocol_serial import SerialAgent
-
-CONFIG_PATH = Path(__file__).with_name("test_config.yaml")
 
 
 def pytest_configure(config):
@@ -27,20 +25,16 @@ def pytest_configure(config):
 
 @pytest.fixture(scope="session")
 def test_config():
-    try:
-        with CONFIG_PATH.open("r", encoding="utf-8") as f:
-            return yaml.safe_load(f) or {}
-    except FileNotFoundError:
-        return {}
+    return load_config()
 
 
 @pytest.fixture(scope="session")
 def serial_agent(test_config, pytestconfig):
-    port = test_config.get("cdc_port")
+    port = test_config.get("robot_port")
     if not port:
         pytest.skip(f"No serial port configured in {CONFIG_PATH}")
 
-    baudrate = test_config.get("baudrate", 115200)
+    baudrate = test_config.get("robot_baudrate", 2_000_000)
     agent = SerialAgent(port, baudrate)
     try:
         agent.connect()

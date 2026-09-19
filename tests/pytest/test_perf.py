@@ -2,7 +2,7 @@
 """
 test_perf.py - Basic ESP32 USB protocol latency/performance smoke test.
 
-Optional keys in utils/test_config.yaml:
+Optional keys in the root config.yaml:
     perf_iterations: 50
     perf_warmup_iterations: 5
     perf_ack_timeout: 0.5

@@ -3,7 +3,7 @@
 test_stress.py - Sustained ESP32 USB protocol heartbeat stress test.
 
 The test runs for 30 seconds by default.  The duration and serial retry
-settings can be overridden in test_config.yaml with:
+settings can be overridden in the root config.yaml with:
 
     stress_duration_s: 30
     stress_ack_timeout: 0.5
