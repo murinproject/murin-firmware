@@ -4,6 +4,60 @@ on:
   workflow_dispatch:
 
 jobs:
+  pytest-windows:
+    runs-on: self-hosted
+    steps:
+      - name: Test PowerShell
+        shell: powershell -ExecutionPolicy Bypass {0}
+        run: |
+          Write-Host "PowerShell is working"
+          Get-ExecutionPolicy -List
+
+      - name: Test PS1
+        shell: powershell -ExecutionPolicy Bypass {0}
+        run: |
+          Set-Content "$env:TEMP\test.ps1" 'Write-Host "TEST SCRIPT WORKS"'
+          & "$env:TEMP\test.ps1"
+
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.12
+
+      - name: Create virtual environment
+        run: python -m venv .venv
+
+      - name: Install dependencies
+        run: .venv\Scripts\python.exe -m pip install -r requirements.txt
+
+      - name: Run pytest
+        run: .venv\Scripts\python.exe -m pytest tests/pytest -v -rs
+  gtest-windows:
+    runs-on: self-hosted
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Cache CMake FetchContent deps
+        uses: actions/cache@v4
+        with:
+          path: tests/gtest/build/_deps
+          key: ${{ runner.os }}-gtest-${{ hashFiles('tests/gtest/CMakeLists.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-gtest-
+
+      - name: Configure GoogleTests
+        run: cmake -S tests/gtest -B tests/gtest/build
+
+      - name: Build GoogleTests
+        run: cmake --build tests/gtest/build --config Release
+
+      - name: Run GoogleTests
+        run: ctest --test-dir tests/gtest/build --output-on-failure -C Release
+
   gtest_coverage:
     runs-on: ubuntu-latest
     steps:

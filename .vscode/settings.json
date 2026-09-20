@@ -1,5 +1,7 @@
 {
   "C_Cpp.intelliSenseEngine": "default",
+  "cmake.configureOnOpen": false,
+	"cmake.automaticReconfigure": false,
   "idf.openOcdConfigs": [
     "board/esp32s3-builtin.cfg"
   ],
